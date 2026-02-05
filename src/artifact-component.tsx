@@ -282,9 +282,7 @@ const ResultCard = ({
   result: Result;
   onPermalinkClick: (id: number) => void;
 }) => {
-  const audioId = result.audio_file
-    ? result.audio_file.match(/\d+/)?.[0]
-    : null;
+  const audioId = result.audio_file?.match(/\d+/)?.[0] ?? null;
   return (
     <div className="border border-gray-200 rounded-lg p-6 mb-8 shadow-sm bg-white break-inside-avoid-column">
       <div className="group inline-flex items-center gap-2">
