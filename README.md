@@ -10,30 +10,21 @@ Data preparation scripts: https://tddschn/moe-hokkien-sutian-data .
 
 ## Features
 
-- Search entries by hanzi or romanization
+- Search entries by Hanji (漢字) or romanization (台羅)
 - Search examples by Mandarin or Hokkien
 - Full-text search (Mandarin / Hokkien)
-- Regex search against entry hanzi (custom SQLite `REGEXP` function)
+- Regex search against entry Hanji (custom SQLite `REGEXP` function)
 - Category browse
 - Sentence segmentation (“逐詞查詢”) for looking up embedded words
 - Phonetic picker (initial/final/tone) with live filtering + match counts
 - Permalinks to a single entry (`?su=...`) and links back to MOE
 - Audio play/download via MOE media URLs
 
-## Quickstart
-
-```bash
-npm install
-npm run dev
-```
-
-Then open `http://localhost:5173`.
 
 ## Build
 
 ```bash
 npm run build
-npm run preview
 ```
 
 Notes:
@@ -54,11 +45,11 @@ Most searches are shareable/bookmarkable via query parameters.
 
 | Parameter | Mode                | Meaning                                            |
 | --------- | ------------------- | -------------------------------------------------- |
-| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)  |
+| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (Hanji or romanization)  |
 | `me`      | `mandarin_example`  | Search examples by Mandarin translation            |
-| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization) |
+| `hf`      | `hokkien_example`   | Search examples by Hokkien (Hanji or romanization) |
 | `mf`      | `mandarin_fulltext` | Full-text search in Mandarin across fields         |
-| `rx`      | `regex`             | Regex search on entry hanzi                        |
+| `rx`      | `regex`             | Regex search on entry Hanji                        |
 | `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien (entries + examples)   |
 | `cat`     | `category`          | Browse/filter by category                          |
 | `qs`      | `multi_search`      | Sentence segmentation search                       |
