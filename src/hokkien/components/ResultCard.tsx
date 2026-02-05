@@ -2,7 +2,7 @@ import { Link as LinkIcon } from "lucide-react";
 
 import type { Result } from "../types";
 import { AudioControls } from "./AudioControls";
-import { CopyButton, CopyableText, DetailSection } from "./common";
+import { CopyButton, CopyableText, DetailSection, SuiSiannLink } from "./common";
 import { PhoneticDifferencesTable } from "./PhoneticDifferencesTable";
 
 export const ResultCard = ({
@@ -27,6 +27,7 @@ export const ResultCard = ({
         </a>
         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
           <CopyButton textToCopy={result.hanzi} />
+          <SuiSiannLink text={result.hanzi} />
           <button
             onClick={() => onPermalinkClick(result.id)}
             title="Link to this entry"
