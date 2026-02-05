@@ -8,6 +8,23 @@ Use `build` package script exclusively, never use `dev`!! never serve! it's alre
 
 `./functions` hosts cloudflare pages functions scripts.
 
+## Canonical Domain Redirection
+
+The `_middleware.js` function handles canonical domain redirection:
+
+**Redirects to `https://sutian.teddysc.me`:**
+- Any domain that is NOT `sutian.teddysc.me`
+- Production Pages URL: `hokkien-sutian.pages.dev`
+- Any other custom domains
+
+**Does NOT redirect (preserves original URL):**
+- Canonical domain: `sutian.teddysc.me`
+- Preview deployments: `*.hokkien-sutian.pages.dev` (branch previews)
+
+**Preserves full URL on redirect:**
+- Path, query parameters, and fragment are preserved
+- Example: `https://old-domain.com/search?q=test#section` → `https://sutian.teddysc.me/search?q=test#section`
+
 ## URL Query Parameters
 
 The app supports deep linking via URL query parameters:

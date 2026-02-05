@@ -4,10 +4,10 @@ export async function onRequest(context) {
   const hostname = url.hostname;
 
   // Check if the hostname matches any of the non-canonical domains
+  // Skip redirect for preview URLs (*.hokkien-sutian.pages.dev)
   if (
-    // hostname !== "sutian.teddysc.me" &&
-    // hostname.endsWith(".teddysc.me")
-    hostname !== "sutian.teddysc.me"
+    hostname !== "sutian.teddysc.me" &&
+    !hostname.endsWith(".hokkien-sutian.pages.dev")
   ) {
     // Redirect to the canonical domain
     return new Response(null, {
