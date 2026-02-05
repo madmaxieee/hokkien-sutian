@@ -18,6 +18,18 @@ export interface AltPronunciation {
   romanization: string;
 }
 
+export interface EntrySynonym {
+  id: number;
+  hanzi: string;
+}
+
+export interface MeaningSynonym {
+  meaningId: number;
+  entryId: number;
+  hanzi: string;
+  explanation: string;
+}
+
 export interface PhoneticDifference {
   [key: string]: number | string;
 }
@@ -32,6 +44,8 @@ export interface Result {
   variant_characters: string[];
   alternative_pronunciations: AltPronunciation[];
   phonetic_differences: PhoneticDifference | null;
+  entry_synonyms: EntrySynonym[];
+  meaning_synonyms: Map<number, MeaningSynonym[]>;
 }
 
 export interface PhoneticQuery {
