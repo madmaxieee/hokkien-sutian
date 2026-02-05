@@ -1,5 +1,6 @@
 claude-artifact-runner-gitingest.txt
 claude-artifact*.txt
+hokkien-sutian.txt
 *.diff.txt
 htmls/
 cache/

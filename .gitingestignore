@@ -12,3 +12,5 @@ references
 GRID_MODE_TESTING_CHECKLIST.md
 archive
 .claude
+src/components/ui
+README.default.md
