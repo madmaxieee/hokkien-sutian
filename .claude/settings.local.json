@@ -4,7 +4,9 @@
       "Bash(bun run build:*)",
       "Bash(sqlite3:*)",
       "mcp__playwright__browser_click",
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "Bash(npm run build:*)",
+      "Bash(unzip:*)"
     ]
   }
 }

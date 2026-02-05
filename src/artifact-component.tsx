@@ -19,7 +19,95 @@ import {
   Copy,
   Check,
   Link as LinkIcon,
+  Music,
 } from "lucide-react";
+
+// --- Phonetic Constants ---
+const INITIALS = [
+  "p", "ph", "b", "m",
+  "t", "th", "n", "l",
+  "k", "kh", "g", "ng",
+  "h", "ts", "tsh", "s", "j",
+] as const;
+
+const FINALS = [
+  "a", "ah", "ai", "aih", "ainn", "ainnh", "ak", "am", "an", "ang", "ann", "annh", "ap", "at", "au", "auh", "aunn", "aunnh",
+  "e", "eh", "enn", "ennh",
+  "i", "ia", "iah", "iak", "iam", "ian", "iang", "iann", "iannh", "iap", "iat", "iau", "iauh", "iaunn", "ih", "im", "in", "ing", "inn", "io", "ioh", "iok", "iong", "ip", "it", "iu", "iuh", "iunn",
+  "m", "mh", "ng", "ngh",
+  "o", "oh", "ok", "om", "ong", "onn", "onnh", "oo", "ooh", "op",
+  "u", "ua", "uah", "uai", "uaih", "uainn", "uainnh", "uan", "uang", "uann", "uat", "ue", "ueh", "uh", "ui", "uih", "uinn", "un", "ut",
+] as const;
+
+const TONES = [1, 2, 3, 4, 5, 7, 8] as const;
+
+const TONE_LABELS: Record<number, string> = {
+  1: "1 陰平",
+  2: "2 陰上",
+  3: "3 陰去",
+  4: "4 陰入",
+  5: "5 陽平",
+  7: "7 陽去",
+  8: "8 陽入",
+};
+
+
+// Tone mark to number mapping (NFD decomposed)
+const TONE_MARKS: Record<string, number> = {
+  "\u0301": 2, // ◌́ acute
+  "\u0300": 3, // ◌̀ grave
+  "\u0302": 5, // ◌̂ circumflex
+  "\u0304": 7, // ◌̄ macron
+  "\u030D": 8, // ◌̍ vertical line above
+};
+
+interface SyllableComponents {
+  initial: string;
+  final: string;
+  tone: number;
+}
+
+function parseSyllable(syllable: string): SyllableComponents {
+  // Remove annotation markers like 【白】【文】【替】
+  const cleaned = syllable.replace(/【.*?】/g, "").trim();
+  if (!cleaned) return { initial: "", final: "", tone: 0 };
+
+  const normalized = cleaned.normalize("NFD");
+  let tone = 0;
+  let base = "";
+
+  for (const char of normalized) {
+    if (TONE_MARKS[char] !== undefined) {
+      tone = TONE_MARKS[char];
+    } else {
+      base += char;
+    }
+  }
+  base = base.toLowerCase();
+
+  // Check for entering tone (入聲) - ends with h, p, t, k (but not nnh, ngh)
+  const isChecked = /[ptk]$/.test(base) || (/h$/.test(base) && !/n{1,2}h$/.test(base) && base !== "mh" && base !== "ngh");
+
+  if (tone === 0) {
+    tone = isChecked ? 4 : 1;
+  } else if (tone === 5 && isChecked) {
+    tone = 8;
+  }
+
+  // Extract initial (longest match first)
+  let initial = "";
+  const sortedInitials = [...INITIALS].sort((a, b) => b.length - a.length);
+  for (const init of sortedInitials) {
+    if (base.startsWith(init)) {
+      initial = init;
+      break;
+    }
+  }
+
+  const final = initial ? base.slice(initial.length) : base;
+
+  return { initial, final, tone };
+}
 
 // --- TypeScript Interfaces for Data Structures ---
 interface Example {
@@ -379,6 +467,47 @@ const ResultCard = ({
     </div>
   );
 };
+const ToneGroupDisplay = ({
+  groups,
+  onEntryClick,
+}: {
+  groups: ToneGroup[];
+  onEntryClick: (id: number) => void;
+}) => {
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="space-y-6">
+      {groups.map((group) => (
+        <div key={group.tone} className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-bold text-blue-600 font-mono">{group.syllable}</span>
+              <span className="text-sm text-gray-500">
+                {TONE_LABELS[group.tone]} ({group.entries.length}字)
+              </span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {group.entries.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => onEntryClick(entry.id)}
+                  className="text-2xl hover:bg-blue-50 hover:text-blue-700 px-2 py-1 rounded transition-colors"
+                  title={`${entry.hanzi} (${entry.romanization})`}
+                >
+                  {entry.hanzi.replace(/【.*?】/g, "").trim()}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const CategoryModal = ({
   isOpen,
   onClose,
@@ -425,6 +554,311 @@ const CategoryModal = ({
   );
 };
 
+interface PhoneticQuery {
+  initial: string | null;
+  final: string | null;
+  tone: number | null;
+  singleSyllableOnly: boolean;
+}
+
+interface ToneGroup {
+  tone: number;
+  syllable: string;
+  entries: Result[];
+}
+
+const PhoneticPickerModal = ({
+  isOpen,
+  onClose,
+  onSearch,
+  db,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSearch: (query: PhoneticQuery, resultCount: number) => void;
+  db: Database | null;
+}) => {
+  const [selectedInitial, setSelectedInitial] = useState<string | null>(null);
+  const [selectedFinal, setSelectedFinal] = useState<string | null>(null);
+  const [selectedTone, setSelectedTone] = useState<number | null>(null);
+  const [singleSyllableOnly, setSingleSyllableOnly] = useState<boolean>(true);
+  const [matchCount, setMatchCount] = useState<number>(0);
+  const [syllableIndex, setSyllableIndex] = useState<Map<string, Set<number>>>(new Map());
+  const [multiSyllableIndex, setMultiSyllableIndex] = useState<Map<string, Set<number>>>(new Map());
+  const [availableInitials, setAvailableInitials] = useState<Set<string>>(new Set());
+  const [availableFinals, setAvailableFinals] = useState<Set<string>>(new Set());
+  const [availableTones, setAvailableTones] = useState<Set<number>>(new Set());
+
+  // Build syllable index on mount
+  useEffect(() => {
+    if (!db || !isOpen) return;
+
+    const singleIndex = new Map<string, Set<number>>();
+    const multiIndex = new Map<string, Set<number>>();
+    const allInitials = new Set<string>();
+    const allFinals = new Set<string>();
+    const allTones = new Set<number>();
+
+    try {
+      const result = db.exec("SELECT id, romanization FROM entries");
+      if (result.length > 0) {
+        for (const row of result[0].values) {
+          const id = row[0] as number;
+          const romanization = row[1] as string;
+          if (!romanization) continue;
+
+          // Handle alternative pronunciations separated by "/"
+          const pronunciationVariants = romanization.split("/");
+
+          for (const variant of pronunciationVariants) {
+            const syllables = variant.split(/[-\s]+/).filter(s => s.trim());
+            const isSingleSyllable = syllables.length === 1;
+
+            for (const syl of syllables) {
+              const { initial, final, tone } = parseSyllable(syl);
+              if (!final) continue; // Skip if no valid final
+
+              const key = `${initial || "ling"}|${final}|${tone}`;
+
+              if (isSingleSyllable) {
+                if (!singleIndex.has(key)) singleIndex.set(key, new Set());
+                singleIndex.get(key)!.add(id);
+              } else {
+                if (!multiIndex.has(key)) multiIndex.set(key, new Set());
+                multiIndex.get(key)!.add(id);
+              }
+
+              allInitials.add(initial || "ling");
+              allFinals.add(final);
+              allTones.add(tone);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error building syllable index:", err);
+    }
+
+    setSyllableIndex(singleIndex);
+    setMultiSyllableIndex(multiIndex);
+    setAvailableInitials(allInitials);
+    setAvailableFinals(allFinals);
+    setAvailableTones(allTones);
+  }, [db, isOpen]);
+
+  // Update match count and available options when selection changes
+  useEffect(() => {
+    if (syllableIndex.size === 0 && multiSyllableIndex.size === 0) return;
+
+    const matchingIds = new Set<number>();
+    const validInitials = new Set<string>();
+    const validFinals = new Set<string>();
+    const validTones = new Set<number>();
+
+    // Choose which indices to use based on singleSyllableOnly
+    const indicesToUse = singleSyllableOnly
+      ? [syllableIndex]
+      : [syllableIndex, multiSyllableIndex];
+
+    for (const index of indicesToUse) {
+      for (const [key, ids] of index) {
+        const [init, fin, t] = key.split("|");
+        const tone = parseInt(t);
+
+        const matchesInitial = selectedInitial === null || init === selectedInitial;
+        const matchesFinal = selectedFinal === null || fin === selectedFinal;
+        const matchesTone = selectedTone === null || tone === selectedTone;
+
+        if (matchesInitial && matchesFinal && matchesTone) {
+          ids.forEach((id) => matchingIds.add(id));
+        }
+
+        // Track what's available given current selection
+        if (matchesFinal && matchesTone) validInitials.add(init);
+        if (matchesInitial && matchesTone) validFinals.add(fin);
+        if (matchesInitial && matchesFinal) validTones.add(tone);
+      }
+    }
+
+    setMatchCount(matchingIds.size);
+    setAvailableInitials(validInitials);
+    setAvailableFinals(validFinals);
+    setAvailableTones(validTones);
+  }, [selectedInitial, selectedFinal, selectedTone, syllableIndex, multiSyllableIndex, singleSyllableOnly]);
+
+  const handleSearch = () => {
+    onSearch(
+      { initial: selectedInitial, final: selectedFinal, tone: selectedTone, singleSyllableOnly },
+      matchCount
+    );
+    onClose();
+  };
+
+  const handleReset = () => {
+    setSelectedInitial(null);
+    setSelectedFinal(null);
+    setSelectedTone(null);
+    setSingleSyllableOnly(true);
+  };
+
+  if (!isOpen) return null;
+
+  const ButtonPill = ({
+    selected,
+    available,
+    onClick,
+    children,
+  }: {
+    selected: boolean;
+    available: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={!available && !selected}
+      className={`px-2 py-1 rounded text-sm font-mono transition-colors ${
+        selected
+          ? "bg-blue-600 text-white"
+          : available
+            ? "bg-gray-100 hover:bg-blue-100 text-gray-700"
+            : "bg-gray-50 text-gray-300 cursor-not-allowed"
+      }`}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] m-4 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+          <h2 className="text-xl font-bold">聲韻調查詢</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Initial Consonants */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+              聲母 (Initial)
+              {selectedInitial && (
+                <span className="ml-2 text-blue-600">: {selectedInitial === "ling" ? "零聲母" : selectedInitial}</span>
+              )}
+            </h3>
+            <div className="flex flex-wrap gap-1">
+              <ButtonPill
+                selected={selectedInitial === "ling"}
+                available={availableInitials.has("ling")}
+                onClick={() => setSelectedInitial(selectedInitial === "ling" ? null : "ling")}
+              >
+                零
+              </ButtonPill>
+              {INITIALS.map((init) => (
+                <ButtonPill
+                  key={init}
+                  selected={selectedInitial === init}
+                  available={availableInitials.has(init)}
+                  onClick={() => setSelectedInitial(selectedInitial === init ? null : init)}
+                >
+                  {init}
+                </ButtonPill>
+              ))}
+            </div>
+          </div>
+
+          {/* Finals */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+              韻母 (Final)
+              {selectedFinal && <span className="ml-2 text-blue-600">: {selectedFinal}</span>}
+            </h3>
+            <div className="flex flex-wrap gap-1">
+              {FINALS.map((fin) => (
+                <ButtonPill
+                  key={fin}
+                  selected={selectedFinal === fin}
+                  available={availableFinals.has(fin)}
+                  onClick={() => setSelectedFinal(selectedFinal === fin ? null : fin)}
+                >
+                  {fin}
+                </ButtonPill>
+              ))}
+            </div>
+          </div>
+
+          {/* Tones */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+              聲調 (Tone)
+              {selectedTone && <span className="ml-2 text-blue-600">: {TONE_LABELS[selectedTone]}</span>}
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {TONES.map((tone) => (
+                <ButtonPill
+                  key={tone}
+                  selected={selectedTone === tone}
+                  available={availableTones.has(tone)}
+                  onClick={() => setSelectedTone(selectedTone === tone ? null : tone)}
+                >
+                  {TONE_LABELS[tone]}
+                </ButtonPill>
+              ))}
+            </div>
+          </div>
+
+          {/* Options */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={singleSyllableOnly}
+                onChange={(e) => setSingleSyllableOnly(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">僅顯示單音節詞（單字）</span>
+            </label>
+          </div>
+
+          {/* Preview */}
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-gray-600">符合條件: </span>
+                <span className="font-bold text-lg text-blue-600">{matchCount.toLocaleString()}</span>
+                <span className="text-gray-600"> 筆</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReset}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  重設
+                </button>
+                <button
+                  onClick={handleSearch}
+                  disabled={matchCount === 0}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  查詢
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Main Dictionary Component ---
 
 const HokkienDictionary = () => {
@@ -437,8 +871,11 @@ const HokkienDictionary = () => {
   const [searchMode, setSearchMode] = useState("hokkien_entry");
   const [categories, setCategories] = useState<string[]>([]);
   const [isCategoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [isPhoneticModalOpen, setPhoneticModalOpen] = useState(false);
   const [forceSingleColumn, setForceSingleColumn] = useState(false);
   const [isSingleEntryView, setIsSingleEntryView] = useState(false);
+  const [toneGroups, setToneGroups] = useState<ToneGroup[]>([]);
+  const [isPhoneticSearch, setIsPhoneticSearch] = useState(false);
 
   const queryKeyToMode = useMemo(
     () => ({
@@ -564,6 +1001,8 @@ const HokkienDictionary = () => {
       }
       setSearching(true);
       setResults([]);
+      setToneGroups([]);
+      setIsPhoneticSearch(false);
       setError(null);
       try {
         if (mode === "multi_search") {
@@ -660,6 +1099,133 @@ const HokkienDictionary = () => {
     performSearch(category, "category");
   };
 
+  const handlePhoneticSearch = useCallback(
+    (query: PhoneticQuery, _resultCount: number) => {
+      if (!db) return;
+      setIsSingleEntryView(false);
+      setSearching(true);
+      setResults([]);
+      setToneGroups([]);
+      setIsPhoneticSearch(true);
+      setError(null);
+
+      try {
+        // Map: tone -> Map<syllable, Set<entryId>>
+        const toneToEntries = new Map<number, Map<string, Set<number>>>();
+        const result = db.exec("SELECT id, romanization FROM entries");
+
+        if (result.length > 0) {
+          for (const row of result[0].values) {
+            const id = row[0] as number;
+            const romanization = row[1] as string;
+            if (!romanization) continue;
+
+            // Handle alternative pronunciations separated by "/"
+            const pronunciationVariants = romanization.split("/");
+
+            for (const variant of pronunciationVariants) {
+              const syllables = variant.split(/[-\s]+/).filter(s => s.trim());
+
+              // Skip multi-syllable entries if singleSyllableOnly is true
+              if (query.singleSyllableOnly && syllables.length > 1) continue;
+
+              for (const syl of syllables) {
+                const { initial, final, tone } = parseSyllable(syl);
+                if (!final) continue;
+
+                const entryInitial = initial || "ling";
+                const matchesInitial = query.initial === null || entryInitial === query.initial;
+                const matchesFinal = query.final === null || final === query.final;
+                const matchesTone = query.tone === null || tone === query.tone;
+
+                if (matchesInitial && matchesFinal && matchesTone) {
+                  if (!toneToEntries.has(tone)) {
+                    toneToEntries.set(tone, new Map());
+                  }
+                  const syllableMap = toneToEntries.get(tone)!;
+                  // Normalize syllable for grouping (use the matched syllable)
+                  const normalizedSyl = syl.trim();
+                  if (!syllableMap.has(normalizedSyl)) {
+                    syllableMap.set(normalizedSyl, new Set());
+                  }
+                  syllableMap.get(normalizedSyl)!.add(id);
+                }
+              }
+            }
+          }
+        }
+
+        // Build tone groups
+        const groups: ToneGroup[] = [];
+        const allEntryIds = new Set<number>();
+
+        // Sort by tone number
+        const sortedTones = Array.from(toneToEntries.keys()).sort((a, b) => a - b);
+
+        for (const tone of sortedTones) {
+          const syllableMap = toneToEntries.get(tone)!;
+          // Merge all entries for this tone
+          const toneEntryIds = new Set<number>();
+          let representativeSyllable = "";
+
+          for (const [syl, ids] of syllableMap) {
+            if (!representativeSyllable) representativeSyllable = syl;
+            ids.forEach(id => {
+              toneEntryIds.add(id);
+              allEntryIds.add(id);
+            });
+          }
+
+          const entries = Array.from(toneEntryIds)
+            .map(id => fetchEntryDetails(id))
+            .filter(Boolean) as Result[];
+
+          if (entries.length > 0) {
+            groups.push({
+              tone,
+              syllable: representativeSyllable,
+              entries: sortResults(entries, ""),
+            });
+          }
+        }
+
+        setToneGroups(groups);
+
+        // Also set flat results for compatibility
+        const allResults = Array.from(allEntryIds)
+          .map(id => fetchEntryDetails(id))
+          .filter(Boolean) as Result[];
+        setResults(sortResults(allResults, ""));
+
+        // Build display label
+        const parts: string[] = [];
+        if (query.initial) parts.push(`聲母:${query.initial === "ling" ? "零" : query.initial}`);
+        if (query.final) parts.push(`韻母:${query.final}`);
+        if (query.tone) parts.push(`聲調:${query.tone}`);
+        const label = parts.length > 0 ? parts.join(" ") : "全部";
+        const suffix = query.singleSyllableOnly ? "" : " (含多音節)";
+
+        setSearchTerm(`[聲韻調] ${label}${suffix}`);
+        setSearchMode("phonetic");
+
+        // Update URL
+        const params = new URLSearchParams();
+        if (query.initial) params.set("si", query.initial);
+        if (query.final) params.set("sf", query.final);
+        if (query.tone) params.set("st", query.tone.toString());
+        if (!query.singleSyllableOnly) params.set("sm", "0");
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.pushState({ path: newUrl }, "", newUrl);
+      } catch (err) {
+        console.error("Phonetic search error:", err);
+        setError("聲韻調查詢時發生錯誤。");
+      } finally {
+        setSearching(false);
+      }
+    },
+    [db, fetchEntryDetails, sortResults]
+  );
+
   const handleSearchModeChange = (newMode: string) => {
     setSearchMode(newMode);
     const trimmedSearchTerm = searchTerm.trim();
@@ -675,6 +1241,7 @@ const HokkienDictionary = () => {
     const newUrl = `${window.location.pathname}?su=${id}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
     setIsSingleEntryView(true);
+    setIsPhoneticSearch(false);
     const result = fetchEntryDetails(id);
     setResults(result ? [result] : []);
   };
@@ -703,6 +1270,15 @@ const HokkienDictionary = () => {
           setResults(result ? [result] : []);
         }
         setSearching(false);
+      } else if (params.has("si") || params.has("sf") || params.has("st")) {
+        // Phonetic search from URL
+        const query: PhoneticQuery = {
+          initial: params.get("si"),
+          final: params.get("sf"),
+          tone: params.has("st") ? parseInt(params.get("st")!, 10) : null,
+          singleSyllableOnly: params.get("sm") !== "0", // default true unless sm=0
+        };
+        handlePhoneticSearch(query, 0);
       } else {
         setIsSingleEntryView(false);
         let initialTerm = "";
@@ -723,7 +1299,7 @@ const HokkienDictionary = () => {
         }
       }
     },
-    [db, fetchEntryDetails, queryKeyToMode, performSearch],
+    [db, fetchEntryDetails, queryKeyToMode, performSearch, handlePhoneticSearch],
   );
 
   useEffect(() => {
@@ -787,12 +1363,75 @@ const HokkienDictionary = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSingleEntryView(false);
+
+    let termToSearch = searchTerm.trim();
+
+    // Check for "sound:XXX" shorthand syntax (e.g., "sound:tan", "sound:kín", "sound:tan1")
+    const soundMatch = termToSearch.match(/^sound:(\S+)$/i);
+    if (soundMatch) {
+      let syllable = soundMatch[1];
+
+      // Check for explicit trailing tone number (e.g., "tan1", "kin2")
+      let explicitTone: number | null = null;
+      const toneNumMatch = syllable.match(/^(.+?)([12345789])$/);
+      if (toneNumMatch) {
+        syllable = toneNumMatch[1];
+        explicitTone = parseInt(toneNumMatch[2]);
+      }
+
+      const { initial, final, tone: parsedTone } = parseSyllable(syllable);
+
+      // Only use tone if explicitly provided: trailing number, or a tone diacritic was present.
+      // parseSyllable defaults unmarked to 1/4 — detect marks by checking NFD for diacritics.
+      const hasExplicitToneMark = syllable.normalize("NFD").split("").some(c => TONE_MARKS[c] !== undefined);
+      const finalTone = explicitTone ?? (hasExplicitToneMark ? parsedTone : null);
+
+      if (final) {
+        handlePhoneticSearch({
+          initial: initial || null,
+          final: final,
+          tone: finalTone,
+          singleSyllableOnly: true,
+        }, 0);
+        return;
+      }
+    }
+
+    // Check for Chinese phonetic format: 聲母:X 韻母:Y 聲調:Z
+    const hasChinesePhonetic = termToSearch.includes("聲母:") || termToSearch.includes("韻母:") || termToSearch.includes("聲調:");
+    if (hasChinesePhonetic || termToSearch.includes("聲韻調")) {
+      const initialMatch = termToSearch.match(/聲母:(\S+)/);
+      const finalMatch = termToSearch.match(/韻母:(\S+)/);
+      const toneMatch = termToSearch.match(/聲調:(\d+)/);
+
+      const initial = initialMatch ? (initialMatch[1] === "零" ? "ling" : initialMatch[1]) : null;
+      const final = finalMatch ? finalMatch[1] : null;
+      const tone = toneMatch ? parseInt(toneMatch[1]) : null;
+
+      if (initial || final || tone) {
+        handlePhoneticSearch({
+          initial,
+          final,
+          tone,
+          singleSyllableOnly: true,
+        }, 0);
+        return;
+      }
+    }
+
+    // Strip random label prefix
+    if (termToSearch.startsWith("(隨機)")) {
+      termToSearch = termToSearch.replace(/^\(隨機\)\s*/, "").trim();
+      if (!termToSearch) return;
+      setSearchTerm(termToSearch);
+    }
+
     const queryKey = modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
     const params = new URLSearchParams();
-    if (searchTerm.trim()) params.set(queryKey, searchTerm.trim());
+    if (termToSearch) params.set(queryKey, termToSearch);
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
-    performSearch(searchTerm, searchMode);
+    performSearch(termToSearch, searchMode);
   };
 
   const searchModeGroups = useMemo(
@@ -840,7 +1479,7 @@ const HokkienDictionary = () => {
         </a>
         {!isSingleEntryView && (
           <>
-            <div className="flex justify-center gap-4 mb-6">
+            <div className="flex justify-center gap-4 mb-6 flex-wrap">
               <button
                 onClick={handleRandomWord}
                 className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
@@ -854,6 +1493,13 @@ const HokkienDictionary = () => {
               >
                 <Menu size={18} />
                 依分類瀏覽
+              </button>
+              <button
+                onClick={() => setPhoneticModalOpen(true)}
+                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
+              >
+                <Music size={18} />
+                聲韻調查詢
               </button>
             </div>
             <div className="max-w-4xl mx-auto">
@@ -917,28 +1563,53 @@ const HokkienDictionary = () => {
         {!searching &&
           results.length === 0 &&
           (searchTerm || isSingleEntryView) &&
-          !searchTerm.startsWith("(隨機)") && (
+          !searchTerm.startsWith("(隨機)") &&
+          !searchTerm.startsWith("[聲韻調]") && (
+            <p className="text-center text-gray-500">查無結果。</p>
+          )}
+        {!searching &&
+          toneGroups.length === 0 &&
+          searchTerm.startsWith("[聲韻調]") && (
             <p className="text-center text-gray-500">查無結果。</p>
           )}
 
-        <div
-          data-testid="results-container"
-          className={`transition-all duration-500 ${isSingleEntryView || forceSingleColumn || results.length <= 1 ? "max-w-4xl mx-auto" : "lg:columns-2 lg:gap-x-8"}`}
-        >
-          {results.map((result) => (
-            <ResultCard
-              key={`${result.id}-${result.hanzi}`}
-              result={result}
-              onPermalinkClick={handlePermalinkClick}
+        {/* Phonetic search: show grouped by tone */}
+        {isPhoneticSearch && toneGroups.length > 0 && !isSingleEntryView && (
+          <div className="max-w-4xl mx-auto">
+            <ToneGroupDisplay
+              groups={toneGroups}
+              onEntryClick={handlePermalinkClick}
             />
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Regular search or single entry view: show cards */}
+        {(!isPhoneticSearch || isSingleEntryView) && (
+          <div
+            data-testid="results-container"
+            className={`transition-all duration-500 ${isSingleEntryView || forceSingleColumn || results.length <= 1 ? "max-w-4xl mx-auto" : "lg:columns-2 lg:gap-x-8"}`}
+          >
+            {results.map((result) => (
+              <ResultCard
+                key={`${result.id}-${result.hanzi}`}
+                result={result}
+                onPermalinkClick={handlePermalinkClick}
+              />
+            ))}
+          </div>
+        )}
       </div>
       <CategoryModal
         isOpen={isCategoryModalOpen}
         onClose={() => setCategoryModalOpen(false)}
         categories={categories}
         onSelect={handleCategorySelect}
+      />
+      <PhoneticPickerModal
+        isOpen={isPhoneticModalOpen}
+        onClose={() => setPhoneticModalOpen(false)}
+        onSearch={handlePhoneticSearch}
+        db={db}
       />
     </div>
   );

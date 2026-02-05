@@ -17,6 +17,9 @@ The app supports deep linking via URL query parameters:
 | `cat` | `category` | Browse by category |
 | `qs` | `multi_search` | Sentence segmentation search |
 | `su` | `single_entry` | Direct entry lookup by ID |
+| `si` | `phonetic` | Phonetic search by initial consonant (聲母) |
+| `sf` | `phonetic` | Phonetic search by final/rhyme (韻母) |
+| `st` | `phonetic` | Phonetic search by tone (聲調) |
 
 ## Search Modes
 
@@ -113,6 +116,42 @@ Direct entry retrieval by database ID (used for permalinks).
 SELECT hanzi, romanization, category, audio_file FROM entries WHERE id = $entryId
 ```
 
+### 10. Phonetic Search (`phonetic`)
+**UI Label:** 聲韻調查詢
+
+Interactive picker allowing users to filter entries by phonetic components:
+- **聲母 (Initial):** p, ph, b, m, t, th, n, l, k, kh, g, ng, h, ts, tsh, s, j, 零(zero initial)
+- **韻母 (Final):** a, ah, ai, aih, am, an, ang, etc. (87 finals total)
+- **聲調 (Tone):** 1-8 (excluding 6, which merged with 2)
+
+**URL Parameters:**
+```
+?si=k           → entries with initial "k"
+?sf=ong         → entries with final "ong"
+?st=1           → entries with tone 1
+?si=k&sf=a&st=1 → entries with syllable "ka" (tone 1)
+```
+
+**Algorithm:**
+1. Builds syllable index from all entry romanizations on modal open
+2. Parses each romanization into syllables, then into initial/final/tone components
+3. Uses `parseSyllable()` function with NFD normalization to extract tone marks
+4. Filters available options based on current selection (dynamic narrowing)
+5. Shows real-time match count as user selects components
+
+**Romanization Parsing:**
+```typescript
+const TONE_MARKS = {
+  "\u0301": 2, // ◌́ acute (陰上)
+  "\u0300": 3, // ◌̀ grave (陰去)
+  "\u0302": 5, // ◌̂ circumflex (陽平)
+  "\u0304": 7, // ◌̄ macron (陽去)
+  "\u030D": 8, // ◌̍ vertical line (陽入)
+};
+// No mark + checked final (p,t,k,h) = tone 4 (陰入)
+// No mark + non-checked = tone 1 (陰平)
+```
+
 ## Entry Detail Fetching
 
 When displaying results, `fetchEntryDetails(entryId)` retrieves:
@@ -147,6 +186,15 @@ Loads all distinct categories at startup:
 SELECT DISTINCT category FROM entries WHERE category IS NOT NULL AND category != ''
 ```
 Categories are split by comma and deduplicated.
+
+### Phonetic Picker Modal
+Interactive single-page phonetic selector with:
+- Three-way filter: initial, final, tone (any can be selected first)
+- Dynamic availability: unavailable options greyed out based on current selection
+- Live match count display
+- Toggle selection (click again to deselect)
+- Reset button to clear all selections
+- URL deep linking support
 
 ### Document Title
 Dynamically updates based on:
