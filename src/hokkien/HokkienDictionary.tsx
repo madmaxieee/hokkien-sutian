@@ -304,6 +304,10 @@ const HokkienDictionary = () => {
     setCategoryModalOpen(false);
     setSearchTerm(category);
     setSearchMode("category");
+
+    const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+    window.history.pushState({ path: newUrl }, "", newUrl);
+
     performSearch(category, "category");
   };
 
