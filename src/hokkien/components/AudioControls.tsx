@@ -38,7 +38,7 @@ export const AudioControls = ({ entryId }: { entryId: number | null }) => {
   };
 
   return (
-    <div className="hidden items-center gap-2 ml-3">
+    <div className="flex items-center gap-2 ml-3">
       <audio ref={audioRef} src={audioUrl} preload="none"></audio>
       <button
         onClick={playAudio}
