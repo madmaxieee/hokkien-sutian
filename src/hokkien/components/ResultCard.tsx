@@ -106,17 +106,11 @@ export const ResultCard = ({
       </div>
 
       <div className="mt-6 border-t pt-4 text-sm text-gray-500 space-y-1">
-        <DetailSection title="又見音">
+        <DetailSection title="又唸作">
           {result.alternative_pronunciations?.map((alt, i) => (
-            <a
-              href={`https://sutian.moe.edu.tw/zh-hant/su/${alt.id}/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              key={i}
-              className="text-blue-600 hover:underline"
-            >
-              <CopyableText text={`${alt.hanzi} ${alt.romanization}`} alwaysShowButtons={alwaysShowButtons} />
-            </a>
+            <span key={i} className="text-blue-600">
+              <CopyableText text={alt.romanization} alwaysShowButtons={alwaysShowButtons} />
+            </span>
           ))}
         </DetailSection>
         <DetailSection title="異用字">
