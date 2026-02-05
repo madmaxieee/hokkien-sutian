@@ -8,7 +8,10 @@
       "Bash(npm run build:*)",
       "Bash(unzip:*)",
       "Bash(identify:*)",
-      "mcp__playwright__browser_tabs"
+      "mcp__playwright__browser_tabs",
+      "WebFetch(domain:sutian.moe.edu.tw)",
+      "mcp__playwright__browser_run_code",
+      "mcp__playwright__browser_evaluate"
     ]
   }
 }

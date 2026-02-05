@@ -12,8 +12,6 @@ export const ResultCard = ({
   result: Result;
   onPermalinkClick: (id: number) => void;
 }) => {
-  const audioId = result.audio_file?.match(/\d+/)?.[0] ?? null;
-
   return (
     <div className="border border-gray-200 rounded-lg p-6 mb-8 shadow-sm bg-white break-inside-avoid-column">
       <div className="group inline-flex items-center gap-2">
@@ -41,7 +39,7 @@ export const ResultCard = ({
 
       <div className="flex items-center text-xl text-blue-600 font-mono mb-4">
         <CopyableText text={result.romanization} />
-        <AudioControls audioId={audioId} />
+        <AudioControls entryId={result.audio_file ? result.id : null} />
       </div>
 
       <div className="space-y-5">
