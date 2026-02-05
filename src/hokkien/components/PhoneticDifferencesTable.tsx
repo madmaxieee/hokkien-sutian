@@ -43,6 +43,9 @@ export const PhoneticDifferencesTable = ({
 
   if (sortedPhonetics.length === 0) return null;
 
+  // Track which pronunciation values have already been shown
+  const seenValues = new Set<string>();
+
   return (
     <div className="mt-6">
       <h3 className="text-xl font-semibold text-gray-700 mb-3">語音差異</h3>
@@ -55,14 +58,23 @@ export const PhoneticDifferencesTable = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {sortedPhonetics.map((item) => (
-              <tr key={item.label} className="hover:bg-gray-50">
-                <td className="p-3 text-gray-800">{item.label}</td>
-                <td className="p-3 text-blue-600 font-mono">
-                  <CopyableText text={item.value} alwaysShowButtons={alwaysShowButtons} />
-                </td>
-              </tr>
-            ))}
+            {sortedPhonetics.map((item) => {
+              const isFirstOccurrence = !seenValues.has(item.value);
+              if (isFirstOccurrence) {
+                seenValues.add(item.value);
+              }
+              return (
+                <tr key={item.label} className="hover:bg-gray-50">
+                  <td className="p-3 text-gray-800">{item.label}</td>
+                  <td className="p-3 text-blue-600 font-mono">
+                    <CopyableText
+                      text={item.value}
+                      alwaysShowButtons={alwaysShowButtons && isFirstOccurrence}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
