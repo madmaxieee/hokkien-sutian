@@ -307,6 +307,17 @@ const HokkienDictionary = () => {
     performSearch(category, "category");
   };
 
+  const handleCategoryClick = (category: string) => {
+    setIsSingleEntryView(false);
+    setSearchTerm(category);
+    setSearchMode("category");
+
+    const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+    window.history.pushState({ path: newUrl }, "", newUrl);
+
+    performSearch(category, "category");
+  };
+
   const handlePhoneticSearch = useCallback(
     (query: PhoneticQuery, _resultCount: number) => {
       if (!db) return;
@@ -866,6 +877,7 @@ const HokkienDictionary = () => {
                 key={`${result.id}-${result.hanzi}`}
                 result={result}
                 onPermalinkClick={handlePermalinkClick}
+                onCategoryClick={handleCategoryClick}
                 alwaysShowButtons={alwaysShowButtons}
               />
             ))}

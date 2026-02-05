@@ -8,10 +8,12 @@ import { PhoneticDifferencesTable } from "./PhoneticDifferencesTable";
 export const ResultCard = ({
   result,
   onPermalinkClick,
+  onCategoryClick,
   alwaysShowButtons = true,
 }: {
   result: Result;
   onPermalinkClick: (id: number) => void;
+  onCategoryClick: (category: string) => void;
   alwaysShowButtons?: boolean;
 }) => {
   return (
@@ -130,7 +132,20 @@ export const ResultCard = ({
           ))}
         </DetailSection>
         <DetailSection title="分類">
-          <span>{result.category?.replace(/,/g, " ")}</span>
+          {result.category?.split(",").map((cat, i, arr) => {
+            const trimmedCat = cat.trim();
+            return (
+              <span key={trimmedCat}>
+                <button
+                  onClick={() => onCategoryClick(trimmedCat)}
+                  className="text-blue-600 hover:underline"
+                >
+                  {trimmedCat}
+                </button>
+                {i < arr.length - 1 && <span className="text-gray-400">、</span>}
+              </span>
+            );
+          })}
         </DetailSection>
       </div>
 
