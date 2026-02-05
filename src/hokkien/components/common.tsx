@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertCircle, Check, Copy, Loader } from "lucide-react";
+import { AlertCircle, Check, Copy, ExternalLink, Loader } from "lucide-react";
 
 export const Spinner = () => (
   <div className="flex justify-center items-center p-8">
@@ -54,19 +54,42 @@ export const CopyButton = ({ textToCopy }: { textToCopy: string }) => {
   );
 };
 
+export const SuiSiannLink = ({ text }: { text: string }) => {
+  const cleanedText = text.replace(/【.*?】/g, "").trim();
+  if (!cleanedText) return null;
+
+  const url = `http://suisiann.ithuan.tw/%E8%AC%9B/${encodeURIComponent(cleanedText)}`;
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="在「鬥拍字」中查看/朗讀"
+      className="text-gray-400 hover:text-red-500 transition-colors"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <ExternalLink size={16} />
+    </a>
+  );
+};
+
 export const CopyableText = ({
   text,
   className,
+  alwaysShowButtons = true,
 }: {
   text: string;
   className?: string;
+  alwaysShowButtons?: boolean;
 }) => (
   <div
-    className={`group inline-flex items-center gap-2 ${className ?? ""}`.trim()}
+    className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"} ${className ?? ""}`.trim()}
   >
     <span>{text}</span>
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
       <CopyButton textToCopy={text} />
+      <SuiSiannLink text={text} />
     </div>
   </div>
 );

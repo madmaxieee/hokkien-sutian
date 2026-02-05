@@ -1,19 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import initSqlJs, { Database } from "sql.js";
-import { Menu, Music, Search, Shuffle } from "lucide-react";
+import { Menu, Music, Search, Settings, Shuffle } from "lucide-react";
 
 import { parseSyllable, TONE_MARKS } from "./phonetics";
-import type { Example, EntrySynonym, MeaningSynonym, PhoneticQuery, Result, ToneGroup } from "./types";
-import {
-  ErrorMessage,
-  Spinner,
-  StyledCheckbox,
-  StyledRadio,
-} from "./components/common";
+import type {
+  Example,
+  EntrySynonym,
+  MeaningSynonym,
+  PhoneticQuery,
+  Result,
+  ToneGroup,
+} from "./types";
+import { ErrorMessage, Spinner, StyledRadio } from "./components/common";
 import { ResultCard } from "./components/ResultCard";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
 import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
+import { SettingsModal } from "./modals/SettingsModal";
 
 const HokkienDictionary = () => {
   const [db, setDb] = useState<Database | null>(null);
@@ -26,7 +29,9 @@ const HokkienDictionary = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [isCategoryModalOpen, setCategoryModalOpen] = useState(false);
   const [isPhoneticModalOpen, setPhoneticModalOpen] = useState(false);
+  const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [forceSingleColumn, setForceSingleColumn] = useState(false);
+  const [alwaysShowButtons, setAlwaysShowButtons] = useState(true);
   const [isSingleEntryView, setIsSingleEntryView] = useState(false);
   const [toneGroups, setToneGroups] = useState<ToneGroup[]>([]);
   const [isPhoneticSearch, setIsPhoneticSearch] = useState(false);
@@ -746,9 +751,29 @@ const HokkienDictionary = () => {
                 <Music size={18} />
                 聲韻調查詢
               </button>
+              <button
+                onClick={() => setSettingsModalOpen(true)}
+                className="flex items-center gap-2 bg-white text-gray-600 px-4 py-2 rounded-full shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <Settings size={18} />
+                設定
+              </button>
             </div>
 
-            <div className="max-w-4xl mx-auto">
+            {/* mb-4 controls whitespace here:
+  用閩南語查詞目                                                                                                                                                                                                                                
+  用北平方言查用例                                                                                                                                                                                                                              
+  用閩南語查用例                                                                                                                                                                                                                                
+  用北平方言查全文                                                                                                                                                                                                                              
+  進階查詢                                                                                                                                                                                                                                      
+  全文(閩南語)                                                                                                                                                                                                                                  
+  正規表示式(詞目)                                                                                                                                                                                                                              
+  逐詞查詢                                                                                                                                                                                                                                      
+  ---                                                                                                                                                                                                                                           
+  whitespace here!!!!>                                                                                                                                                                                                   
+  <search results>   
+  */}
+            <div className="max-w-4xl mx-auto mb-4">
               <form onSubmit={handleSearchSubmit}>
                 <div className="flex flex-col sm:flex-row items-center bg-white rounded-full shadow-lg overflow-hidden p-2">
                   <input
@@ -790,14 +815,6 @@ const HokkienDictionary = () => {
                   ))}
                 </div>
               </form>
-            </div>
-
-            <div className="hidden lg:flex justify-end mb-4 max-w-4xl mx-auto">
-              <StyledCheckbox
-                label="強制單欄顯示 (Always 1 Col)"
-                checked={forceSingleColumn}
-                onChange={(e) => setForceSingleColumn(e.target.checked)}
-              />
             </div>
           </>
         )}
@@ -849,6 +866,7 @@ const HokkienDictionary = () => {
                 key={`${result.id}-${result.hanzi}`}
                 result={result}
                 onPermalinkClick={handlePermalinkClick}
+                alwaysShowButtons={alwaysShowButtons}
               />
             ))}
           </div>
@@ -867,6 +885,15 @@ const HokkienDictionary = () => {
         onClose={() => setPhoneticModalOpen(false)}
         onSearch={handlePhoneticSearch}
         db={db}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        forceSingleColumn={forceSingleColumn}
+        onForceSingleColumnChange={setForceSingleColumn}
+        alwaysShowButtons={alwaysShowButtons}
+        onAlwaysShowButtonsChange={setAlwaysShowButtons}
       />
     </div>
   );
