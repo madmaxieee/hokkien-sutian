@@ -58,6 +58,22 @@ export const ResultCard = ({
                   )}
                   {` ${meaning.explanation.replace(/^:/, "").trim()}`}
                 </p>
+                {result.meaning_synonyms?.has(meaning.id) && (
+                  <div className="mt-3 pl-4">
+                    <span className="text-gray-500 text-sm">近義：</span>
+                    {result.meaning_synonyms.get(meaning.id)?.map((syn, i, arr) => (
+                      <span key={syn.meaningId}>
+                        <button
+                          onClick={() => onPermalinkClick(syn.entryId)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {syn.hanzi}
+                        </button>
+                        {i < arr.length - 1 && <span className="text-gray-400">、</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {meaning.examples?.length > 0 && (
                   <div className="mt-2 pl-4 border-l-2 border-blue-100">
                     <h4 className="font-semibold text-gray-600">用例:</h4>
@@ -103,6 +119,17 @@ export const ResultCard = ({
         <DetailSection title="異用字">
           {result.variant_characters?.map((v, i) => (
             <span key={i}>{v}</span>
+          ))}
+        </DetailSection>
+        <DetailSection title="近義詞">
+          {result.entry_synonyms?.map((syn) => (
+            <button
+              key={syn.id}
+              onClick={() => onPermalinkClick(syn.id)}
+              className="text-blue-600 hover:underline mr-2"
+            >
+              {syn.hanzi}
+            </button>
           ))}
         </DetailSection>
         <DetailSection title="分類">

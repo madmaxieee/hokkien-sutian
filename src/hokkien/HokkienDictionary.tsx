@@ -3,7 +3,7 @@ import initSqlJs, { Database } from "sql.js";
 import { Menu, Music, Search, Shuffle } from "lucide-react";
 
 import { parseSyllable, TONE_MARKS } from "./phonetics";
-import type { Example, PhoneticQuery, Result, ToneGroup } from "./types";
+import type { Example, EntrySynonym, MeaningSynonym, PhoneticQuery, Result, ToneGroup } from "./types";
 import {
   ErrorMessage,
   Spinner,
@@ -101,6 +101,33 @@ const HokkienDictionary = () => {
         `SELECT * FROM phonetic_differences WHERE entry_id = ${entryId}`,
       );
 
+      // Fetch entry-level synonyms
+      const entrySynonyms = exec(
+        `SELECT synonym_id, synonym_hanzi FROM entry_synonyms WHERE entry_id = ${entryId}`,
+      ).values.map((s) => ({
+        id: s[0] as number,
+        hanzi: s[1] as string,
+      })) as EntrySynonym[];
+
+      // Fetch meaning-level synonyms (join with meanings to get entry_id)
+      const meaningSynonymsMap = new Map<number, MeaningSynonym[]>();
+      meanings.forEach((m) => {
+        const synonyms = exec(
+          `SELECT ms.synonym_meaning_id, ms.synonym_hanzi, ms.synonym_explanation, m.entry_id
+           FROM meaning_synonyms ms
+           JOIN meanings m ON ms.synonym_meaning_id = m.id
+           WHERE ms.meaning_id = ${m.id}`,
+        ).values.map((s) => ({
+          meaningId: s[0] as number,
+          hanzi: s[1] as string,
+          explanation: s[2] as string,
+          entryId: s[3] as number,
+        })) as MeaningSynonym[];
+        if (synonyms.length > 0) {
+          meaningSynonymsMap.set(m.id, synonyms);
+        }
+      });
+
       return {
         id: entryId,
         hanzi,
@@ -125,6 +152,8 @@ const HokkienDictionary = () => {
                 {},
               )
             : null,
+        entry_synonyms: entrySynonyms,
+        meaning_synonyms: meaningSynonymsMap,
       };
     },
     [db],
