@@ -3,12 +3,15 @@ import initSqlJs, { Database } from "sql.js";
 import { Menu, Music, Search, Settings, Shuffle } from "lucide-react";
 
 import { parseSyllable, TONE_MARKS } from "./phonetics";
-import type { Example, EntrySynonym, MeaningSynonym, PhoneticQuery, Result, ToneGroup } from "./types";
-import {
-  ErrorMessage,
-  Spinner,
-  StyledRadio,
-} from "./components/common";
+import type {
+  Example,
+  EntrySynonym,
+  MeaningSynonym,
+  PhoneticQuery,
+  Result,
+  ToneGroup,
+} from "./types";
+import { ErrorMessage, Spinner, StyledRadio } from "./components/common";
 import { ResultCard } from "./components/ResultCard";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
 import { CategoryModal } from "./modals/CategoryModal";
@@ -757,7 +760,20 @@ const HokkienDictionary = () => {
               </button>
             </div>
 
-            <div className="max-w-4xl mx-auto mb-12">
+            {/* mb-4 controls whitespace here:
+  用閩南語查詞目                                                                                                                                                                                                                                
+  用北平方言查用例                                                                                                                                                                                                                              
+  用閩南語查用例                                                                                                                                                                                                                                
+  用北平方言查全文                                                                                                                                                                                                                              
+  進階查詢                                                                                                                                                                                                                                      
+  全文(閩南語)                                                                                                                                                                                                                                  
+  正規表示式(詞目)                                                                                                                                                                                                                              
+  逐詞查詢                                                                                                                                                                                                                                      
+  ---                                                                                                                                                                                                                                           
+  whitespace here!!!!>                                                                                                                                                                                                   
+  <search results>   
+  */}
+            <div className="max-w-4xl mx-auto mb-4">
               <form onSubmit={handleSearchSubmit}>
                 <div className="flex flex-col sm:flex-row items-center bg-white rounded-full shadow-lg overflow-hidden p-2">
                   <input
@@ -800,7 +816,6 @@ const HokkienDictionary = () => {
                 </div>
               </form>
             </div>
-
           </>
         )}
 
