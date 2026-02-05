@@ -10,7 +10,7 @@ Data preparation scripts: https://tddschn/moe-hokkien-sutian-data .
 
 ## Features
 
-- Search entries by Hanji (漢字) or romanization (台羅)
+- Search entries by Hanji (漢字, in the db / spec, "hanzi" is also used, we're choosing not to change it to the correct form as they're not user facing) or romanization (台羅)
 - Search examples by Mandarin or Hokkien
 - Full-text search (Mandarin / Hokkien)
 - Regex search against entry Hanji (custom SQLite `REGEXP` function)
