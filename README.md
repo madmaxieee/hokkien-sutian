@@ -6,6 +6,8 @@ It loads an SQLite database (via `sql.js` / WASM) and provides multiple search m
 
 Data is derived from 教育部《臺灣閩南語常用詞辭典》 (https://sutian.moe.edu.tw/).
 
+Data preparation scripts: https://tddschn/moe-hokkien-sutian-data .
+
 ## Features
 
 - Search entries by hanzi or romanization
