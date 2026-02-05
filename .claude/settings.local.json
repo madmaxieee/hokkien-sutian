@@ -11,7 +11,10 @@
       "mcp__playwright__browser_tabs",
       "WebFetch(domain:sutian.moe.edu.tw)",
       "mcp__playwright__browser_run_code",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_wait_for"
     ]
   }
 }

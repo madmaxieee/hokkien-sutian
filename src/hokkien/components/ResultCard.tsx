@@ -33,7 +33,7 @@ export const ResultCard = ({
           <button
             onClick={() => onPermalinkClick(result.id)}
             title="Link to this entry"
-            className="text-gray-400 hover:text-blue-600"
+            className="text-gray-400 hover:text-blue-600 transition-colors"
           >
             <LinkIcon size={16} />
           </button>
