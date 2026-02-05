@@ -7,7 +7,8 @@
       "mcp__playwright__browser_navigate",
       "Bash(npm run build:*)",
       "Bash(unzip:*)",
-      "Bash(identify:*)"
+      "Bash(identify:*)",
+      "mcp__playwright__browser_tabs"
     ]
   }
 }
