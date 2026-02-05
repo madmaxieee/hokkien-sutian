@@ -65,7 +65,7 @@ export const SettingsModal = ({
         <div className="p-4">
           <div className="divide-y divide-gray-200">
             <IOStoggle
-              label="總是顯示操作按鈕 (Copy/Link)"
+              label="總是顯示操作按鈕 (Always Show Copy/Link)"
               checked={alwaysShowButtons}
               onChange={onAlwaysShowButtonsChange}
             />
