@@ -8,13 +8,15 @@ import { PhoneticDifferencesTable } from "./PhoneticDifferencesTable";
 export const ResultCard = ({
   result,
   onPermalinkClick,
+  alwaysShowButtons = true,
 }: {
   result: Result;
   onPermalinkClick: (id: number) => void;
+  alwaysShowButtons?: boolean;
 }) => {
   return (
     <div className="border border-gray-200 rounded-lg p-6 mb-8 shadow-sm bg-white break-inside-avoid-column">
-      <div className="group inline-flex items-center gap-2">
+      <div className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"}`}>
         <a
           href={`https://sutian.moe.edu.tw/zh-hant/su/${result.id}/`}
           target="_blank"
@@ -25,7 +27,7 @@ export const ResultCard = ({
             {result.hanzi}
           </h2>
         </a>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
           <CopyButton textToCopy={result.hanzi} />
           <SuiSiannLink text={result.hanzi} />
           <button
@@ -39,7 +41,7 @@ export const ResultCard = ({
       </div>
 
       <div className="flex items-center text-xl text-blue-600 font-mono mb-4">
-        <CopyableText text={result.romanization} />
+        <CopyableText text={result.romanization} alwaysShowButtons={alwaysShowButtons} />
         <AudioControls entryId={result.audio_file ? result.id : null} />
       </div>
 
@@ -82,10 +84,12 @@ export const ResultCard = ({
                           <CopyableText
                             text={ex.hanzi}
                             className="text-gray-800"
+                            alwaysShowButtons={alwaysShowButtons}
                           />
                           <CopyableText
                             text={ex.romanization}
                             className="text-blue-500 font-mono text-sm"
+                            alwaysShowButtons={alwaysShowButtons}
                           />
                           <p className="text-gray-500 text-sm">
                             ({ex.mandarin_translation})
@@ -111,7 +115,7 @@ export const ResultCard = ({
               key={i}
               className="text-blue-600 hover:underline"
             >
-              <CopyableText text={`${alt.hanzi} ${alt.romanization}`} />
+              <CopyableText text={`${alt.hanzi} ${alt.romanization}`} alwaysShowButtons={alwaysShowButtons} />
             </a>
           ))}
         </DetailSection>
@@ -136,7 +140,7 @@ export const ResultCard = ({
         </DetailSection>
       </div>
 
-      <PhoneticDifferencesTable data={result.phonetic_differences} />
+      <PhoneticDifferencesTable data={result.phonetic_differences} alwaysShowButtons={alwaysShowButtons} />
     </div>
   );
 };

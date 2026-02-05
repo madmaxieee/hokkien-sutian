@@ -77,15 +77,17 @@ export const SuiSiannLink = ({ text }: { text: string }) => {
 export const CopyableText = ({
   text,
   className,
+  alwaysShowButtons = true,
 }: {
   text: string;
   className?: string;
+  alwaysShowButtons?: boolean;
 }) => (
   <div
-    className={`group inline-flex items-center gap-2 ${className ?? ""}`.trim()}
+    className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"} ${className ?? ""}`.trim()}
   >
     <span>{text}</span>
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+    <div className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
       <CopyButton textToCopy={text} />
       <SuiSiannLink text={text} />
     </div>

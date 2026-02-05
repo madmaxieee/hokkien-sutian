@@ -3,8 +3,10 @@ import { CopyableText } from "./common";
 
 export const PhoneticDifferencesTable = ({
   data,
+  alwaysShowButtons = true,
 }: {
   data: PhoneticDifference | null;
+  alwaysShowButtons?: boolean;
 }) => {
   if (!data) return null;
 
@@ -57,7 +59,7 @@ export const PhoneticDifferencesTable = ({
               <tr key={item.label} className="hover:bg-gray-50">
                 <td className="p-3 text-gray-800">{item.label}</td>
                 <td className="p-3 text-blue-600 font-mono">
-                  <CopyableText text={item.value} />
+                  <CopyableText text={item.value} alwaysShowButtons={alwaysShowButtons} />
                 </td>
               </tr>
             ))}
