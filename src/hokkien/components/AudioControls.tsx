@@ -1,12 +1,13 @@
 import React, { useRef } from "react";
 import { Download, Volume2 } from "lucide-react";
 
-export const AudioControls = ({ audioId }: { audioId: string | null }) => {
+export const AudioControls = ({ entryId }: { entryId: number | null }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  if (!audioId) return null;
+  if (entryId === null) return null;
 
-  const audioUrl = `https://sutian.moe.edu.tw/media/senn/mp3/imtong/subak/0/${audioId}.mp3`;
+  const folder = Math.floor(entryId / 1000);
+  const audioUrl = `https://sutian.moe.edu.tw/media/senn/mp3/imtong/subak/${folder}/${entryId}.mp3`;
 
   const playAudio = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -25,7 +26,7 @@ export const AudioControls = ({ audioId }: { audioId: string | null }) => {
       const a = document.createElement("a");
       a.style.display = "none";
       a.href = url;
-      a.download = `${audioId}.mp3`;
+      a.download = `${entryId}.mp3`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
