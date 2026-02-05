@@ -80,7 +80,7 @@ export const ResultCard = ({
                     <h4 className="font-semibold text-gray-600">用例:</h4>
                     <ul className="list-none space-y-3 mt-1">
                       {meaning.examples.map((ex, index) => (
-                        <li key={index}>
+                        <li key={index} className="flex flex-col">
                           <CopyableText
                             text={ex.hanzi}
                             className="text-gray-800"
