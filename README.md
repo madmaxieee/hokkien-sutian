@@ -1,29 +1,38 @@
 # Claude Artifact Runner
 
+updates from Teddy: modified vite config to use vite-plugin-singlefile to build a single file for deployment.
+
+paste claude code to `artifact-component.tsx` and run `make` to build
+
 ## Table of Contents
 
-- [Summary](#summary)
-- [Overview](#overview)
-- [Project scope](#project-scope)
-- [What's included?](#whats-included)
-- [Prerequisites](#prerequisites)
-- [Getting started](#getting-started)
-- [Project structure](#project-structure)
-- [Usage](#usage)
-- [Customization](#customization)
-- [Building for production](#building-for-production)
-- [Deploying your application](#deploying-your-application)
-  - [Local test deployment](#local-test-deployment)
-  - [Traditional web hosting](#traditional-web-hosting)
-  - [Cloud hosting platforms](#cloud-hosting-platforms)
-     - [Netlify](#netlify)
-     - [Vercel](#vercel)
-     - [GitHub Pages](#github-pages)
-     - [Cloudflare Pages](#cloudflare-pages)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgements](#acknowledgements)
+- [Claude Artifact Runner](#claude-artifact-runner)
+  - [Table of Contents](#table-of-contents)
+  - [Summary](#summary)
+  - [Overview](#overview)
+  - [Project scope](#project-scope)
+  - [What's included?](#whats-included)
+  - [Prerequisites](#prerequisites)
+  - [Getting started](#getting-started)
+  - [Project structure](#project-structure)
+  - [Usage](#usage)
+  - [Customization](#customization)
+    - [Removing unneeded components / libraries](#removing-unneeded-components--libraries)
+      - [Unneeded Shadcn UI components:](#unneeded-shadcn-ui-components)
+      - [Unneeded packages (ex: Recharts):](#unneeded-packages-ex-recharts)
+  - [Building for production](#building-for-production)
+  - [Deploying your application](#deploying-your-application)
+    - [Local test deployment](#local-test-deployment)
+    - [Traditional web hosting](#traditional-web-hosting)
+    - [Cloud hosting platforms](#cloud-hosting-platforms)
+      - [Netlify](#netlify)
+      - [Vercel](#vercel)
+      - [GitHub Pages](#github-pages)
+      - [Cloudflare Pages](#cloudflare-pages)
+  - [Troubleshooting](#troubleshooting)
+  - [Contributing](#contributing)
+  - [License](#license)
+  - [Acknowledgements](#acknowledgements)
 
 ## Summary
 

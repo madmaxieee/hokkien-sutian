@@ -1,3 +1,9 @@
+claude-artifact-runner-gitingest.txt
+claude-artifact*.txt
+*.diff.txt
+htmls/
+cache/
+src/*.txt
 # Logs
 logs
 *.log

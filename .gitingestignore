@@ -1,0 +1,14 @@
+public/assets/data
+.githooks
+.vscode
+.env*
+.*ignore
+.*rc
+hokkien-sutian.txt
+*.svg
+docs/plans
+issues
+references
+GRID_MODE_TESTING_CHECKLIST.md
+archive
+.claude
