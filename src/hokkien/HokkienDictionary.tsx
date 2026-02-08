@@ -280,6 +280,10 @@ const HokkienDictionary = () => {
   const handleRandomWord = useCallback(async () => {
     if (!db) return;
 
+    // If we were in phonetic mode, ensure we exit it so random results render.
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
+
     setIsSingleEntryView(false);
     setSearching(true);
 
@@ -293,6 +297,12 @@ const HokkienDictionary = () => {
         setResults([result]);
         setSearchTerm(`(隨機) ${result.hanzi}`);
         setSearchMode("hokkien_entry");
+
+        // Keep deep-linking consistent: random word behaves like a normal Hokkien entry query.
+        const params = new URLSearchParams();
+        params.set("q", result.hanzi);
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.pushState({ path: newUrl }, "", newUrl);
       }
     }
 
@@ -302,6 +312,8 @@ const HokkienDictionary = () => {
   const handleCategorySelect = (category: string) => {
     setIsSingleEntryView(false);
     setCategoryModalOpen(false);
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
     setSearchTerm(category);
     setSearchMode("category");
 
@@ -313,6 +325,8 @@ const HokkienDictionary = () => {
 
   const handleCategoryClick = (category: string) => {
     setIsSingleEntryView(false);
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
     setSearchTerm(category);
     setSearchMode("category");
 
@@ -454,6 +468,8 @@ const HokkienDictionary = () => {
 
   const handleSearchModeChange = (newMode: string) => {
     setSearchMode(newMode);
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
 
     const trimmedSearchTerm = searchTerm.trim();
     if (trimmedSearchTerm && !trimmedSearchTerm.startsWith("(隨機)")) {
@@ -478,8 +494,11 @@ const HokkienDictionary = () => {
   const handleTitleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsSingleEntryView(false);
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
     setResults([]);
     setSearchTerm("");
+    setSearchMode("hokkien_entry");
     window.history.pushState(
       { path: window.location.pathname },
       "",
@@ -493,6 +512,8 @@ const HokkienDictionary = () => {
 
       if (params.has("su")) {
         setIsSingleEntryView(true);
+        setIsPhoneticSearch(false);
+        setToneGroups([]);
         setSearching(true);
 
         const id = parseInt(params.get("su")!, 10);
@@ -517,6 +538,8 @@ const HokkienDictionary = () => {
       }
 
       setIsSingleEntryView(false);
+      setIsPhoneticSearch(false);
+      setToneGroups([]);
 
       let initialTerm = "";
       let initialMode = "hokkien_entry";
@@ -681,6 +704,10 @@ const HokkienDictionary = () => {
       }
     }
 
+    // Any non-phonetic submit exits phonetic display state.
+    setIsPhoneticSearch(false);
+    setToneGroups([]);
+
     // Strip random label prefix
     if (termToSearch.startsWith("(隨機)")) {
       termToSearch = termToSearch.replace(/^\(隨機\)\s*/, "").trim();
@@ -794,7 +821,30 @@ const HokkienDictionary = () => {
                   <input
                     type="search"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setSearchTerm(nextValue);
+
+                      // Native clear-[x] (and manual deletion) should fully reset URL + app state.
+                      if (nextValue === "") {
+                        setError(null);
+                        setIsSingleEntryView(false);
+                        setIsPhoneticSearch(false);
+                        setToneGroups([]);
+                        setResults([]);
+
+                        // If we were in the implicit phonetic mode, snap back to a valid radio mode.
+                        setSearchMode((prev) =>
+                          prev === "phonetic" ? "hokkien_entry" : prev,
+                        );
+
+                        window.history.pushState(
+                          { path: window.location.pathname },
+                          "",
+                          window.location.pathname,
+                        );
+                      }
+                    }}
                     placeholder="輸入查詢詞..."
                     className="w-full sm:flex-grow p-3 text-lg text-gray-700 focus:outline-none"
                   />
