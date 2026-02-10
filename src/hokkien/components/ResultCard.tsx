@@ -2,7 +2,12 @@ import { Link as LinkIcon } from "lucide-react";
 
 import type { Result } from "../types";
 import { AudioControls } from "./AudioControls";
-import { CopyButton, CopyableText, DetailSection, SuiSiannLink } from "./common";
+import {
+  CopyButton,
+  CopyableText,
+  DetailSection,
+  SuiSiannLink,
+} from "./common";
 import { PhoneticDifferencesTable } from "./PhoneticDifferencesTable";
 
 export const ResultCard = ({
@@ -18,7 +23,9 @@ export const ResultCard = ({
 }) => {
   return (
     <div className="border border-gray-200 rounded-lg p-6 mb-8 shadow-sm bg-white break-inside-avoid-column">
-      <div className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"}`}>
+      <div
+        className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"}`}
+      >
         <a
           href={`https://sutian.moe.edu.tw/zh-hant/su/${result.id}/`}
           target="_blank"
@@ -29,7 +36,9 @@ export const ResultCard = ({
             {result.hanzi}
           </h2>
         </a>
-        <div className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
+        <div
+          className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}
+        >
           <CopyButton textToCopy={result.hanzi} />
           <SuiSiannLink text={result.hanzi} />
           <button
@@ -43,7 +52,10 @@ export const ResultCard = ({
       </div>
 
       <div className="flex items-center text-xl text-blue-600 font-mono mb-4">
-        <CopyableText text={result.romanization} alwaysShowButtons={alwaysShowButtons} />
+        <CopyableText
+          text={result.romanization}
+          alwaysShowButtons={alwaysShowButtons}
+        />
         <AudioControls entryId={result.audio_file ? result.id : null} />
       </div>
 
@@ -64,17 +76,21 @@ export const ResultCard = ({
                 {result.meaning_synonyms?.has(meaning.id) && (
                   <div className="mt-3 pl-4">
                     <span className="text-gray-500 text-sm">近義：</span>
-                    {result.meaning_synonyms.get(meaning.id)?.map((syn, i, arr) => (
-                      <span key={syn.meaningId}>
-                        <button
-                          onClick={() => onPermalinkClick(syn.entryId)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {syn.hanzi}
-                        </button>
-                        {i < arr.length - 1 && <span className="text-gray-400">、</span>}
-                      </span>
-                    ))}
+                    {result.meaning_synonyms
+                      .get(meaning.id)
+                      ?.map((syn, i, arr) => (
+                        <span key={syn.meaningId}>
+                          <button
+                            onClick={() => onPermalinkClick(syn.entryId)}
+                            className="text-blue-600 hover:underline"
+                          >
+                            {syn.hanzi}
+                          </button>
+                          {i < arr.length - 1 && (
+                            <span className="text-gray-400">、</span>
+                          )}
+                        </span>
+                      ))}
                   </div>
                 )}
                 {meaning.examples?.length > 0 && (
@@ -111,7 +127,10 @@ export const ResultCard = ({
         <DetailSection title="又唸作">
           {result.alternative_pronunciations?.map((alt, i) => (
             <span key={i} className="text-blue-600">
-              <CopyableText text={alt.romanization} alwaysShowButtons={alwaysShowButtons} />
+              <CopyableText
+                text={alt.romanization}
+                alwaysShowButtons={alwaysShowButtons}
+              />
             </span>
           ))}
         </DetailSection>
@@ -132,24 +151,30 @@ export const ResultCard = ({
           ))}
         </DetailSection>
         <DetailSection title="分類">
-          {result.category?.split(",").map((cat, i, arr) => {
-            const trimmedCat = cat.trim();
-            return (
-              <span key={trimmedCat}>
+          {(result.category ?? "")
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean)
+            .map((cat, i, arr) => (
+              <span key={cat}>
                 <button
-                  onClick={() => onCategoryClick(trimmedCat)}
+                  onClick={() => onCategoryClick(cat)}
                   className="text-blue-600 hover:underline"
                 >
-                  {trimmedCat}
+                  {cat}
                 </button>
-                {i < arr.length - 1 && <span className="text-gray-400">、</span>}
+                {i < arr.length - 1 && (
+                  <span className="text-gray-400">、</span>
+                )}
               </span>
-            );
-          })}
+            ))}
         </DetailSection>
       </div>
 
-      <PhoneticDifferencesTable data={result.phonetic_differences} alwaysShowButtons={alwaysShowButtons} />
+      <PhoneticDifferencesTable
+        data={result.phonetic_differences}
+        alwaysShowButtons={alwaysShowButtons}
+      />
     </div>
   );
 };
