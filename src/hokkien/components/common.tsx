@@ -118,14 +118,21 @@ export const DetailSection = ({
 
 export const StyledRadio = ({
   label,
+  afterLabel,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  afterLabel?: React.ReactNode;
+}) => (
   <label className="flex items-center space-x-2 cursor-pointer text-foreground">
     <input type="radio" className="sr-only peer" {...props} />
     <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
       <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150"></span>
     </span>
-    <span>{label}</span>
+    <span className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      {afterLabel}
+    </span>
   </label>
 );
 
