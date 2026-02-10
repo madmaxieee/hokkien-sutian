@@ -48,24 +48,26 @@ export const PhoneticDifferencesTable = ({
 
   return (
     <div className="mt-6">
-      <h3 className="text-xl font-semibold text-gray-700 mb-3">語音差異</h3>
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <h3 className="text-xl font-semibold mb-3">語音差異</h3>
+      <div className="border border-border rounded-lg overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-accent">
             <tr>
-              <th className="p-3 font-medium text-gray-600">腔</th>
-              <th className="p-3 font-medium text-gray-600">語音差異</th>
+              <th className="p-3 font-medium text-muted-foreground">腔</th>
+              <th className="p-3 font-medium text-muted-foreground">
+                語音差異
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-border">
             {sortedPhonetics.map((item) => {
               const isFirstOccurrence = !seenValues.has(item.value);
               if (isFirstOccurrence) {
                 seenValues.add(item.value);
               }
               return (
-                <tr key={item.label} className="hover:bg-gray-50">
-                  <td className="p-3 text-gray-800">{item.label}</td>
+                <tr key={item.label} className="hover:bg-accent">
+                  <td className="p-3 text-foreground">{item.label}</td>
                   <td className="p-3 text-blue-600 font-mono">
                     <CopyableText
                       text={item.value}

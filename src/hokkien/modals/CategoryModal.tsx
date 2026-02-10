@@ -3,14 +3,46 @@ import { X } from "lucide-react";
 const CATEGORY_GROUPS = {
   special: ["全部"],
   strokes: [
-    "首字一畫", "首字二畫", "首字三畫", "首字四畫", "首字五畫",
-    "首字六畫", "首字七畫", "首字八畫", "首字九畫", "首字十畫",
-    "首字十一畫", "首字十二畫", "首字十三畫", "首字十四畫", "首字十五畫",
-    "首字十六畫", "首字十七畫", "首字十八畫", "首字十九畫", "首字其他筆畫",
-    "一畫", "二畫", "三畫", "四畫", "五畫",
-    "六畫", "七畫", "八畫", "九畫", "十畫",
-    "十一畫", "十二畫", "十三畫", "十四畫", "十五畫",
-    "十六畫", "十七畫", "十八畫", "十九畫", "其他筆畫",
+    "首字一畫",
+    "首字二畫",
+    "首字三畫",
+    "首字四畫",
+    "首字五畫",
+    "首字六畫",
+    "首字七畫",
+    "首字八畫",
+    "首字九畫",
+    "首字十畫",
+    "首字十一畫",
+    "首字十二畫",
+    "首字十三畫",
+    "首字十四畫",
+    "首字十五畫",
+    "首字十六畫",
+    "首字十七畫",
+    "首字十八畫",
+    "首字十九畫",
+    "首字其他筆畫",
+    "一畫",
+    "二畫",
+    "三畫",
+    "四畫",
+    "五畫",
+    "六畫",
+    "七畫",
+    "八畫",
+    "九畫",
+    "十畫",
+    "十一畫",
+    "十二畫",
+    "十三畫",
+    "十四畫",
+    "十五畫",
+    "十六畫",
+    "十七畫",
+    "十八畫",
+    "十九畫",
+    "其他筆畫",
   ],
   pos: [
     "代名詞",
@@ -118,16 +150,8 @@ const CATEGORY_GROUPS = {
     "禽類",
     "魚蝦海獸",
   ],
-  plants: [
-    "植物形體、狀態",
-    "花草樹木",
-    "蔬果作物",
-  ],
-  food: [
-    "食物、飲料、煙酒",
-    "飲食物具",
-    "飲食行為",
-  ],
+  plants: ["植物形體、狀態", "花草樹木", "蔬果作物"],
+  food: ["食物、飲料、煙酒", "飲食物具", "飲食行為"],
   transport: [
     "交通、運輸",
     "安坑輕軌",
@@ -185,11 +209,7 @@ const CATEGORY_GROUPS = {
     "金門縣",
     "連江縣",
   ],
-  industry: [
-    "農林業",
-    "漁牧業",
-    "科技、工業",
-  ],
+  industry: ["農林業", "漁牧業", "科技、工業"],
   abstract: [
     "事、物泛稱",
     "性質、程度",
@@ -203,9 +223,7 @@ const CATEGORY_GROUPS = {
     "顏色、氣味",
     "其他",
   ],
-  medical: [
-    "醫療保健",
-  ],
+  medical: ["醫療保健"],
 };
 
 const GROUP_ORDER = [
@@ -309,9 +327,9 @@ export const CategoryModal = ({
   const groups = categorizeCategories(categories);
 
   // Use GROUP_ORDER to ensure consistent ordering
-  const activeGroups = GROUP_ORDER
-    .map(name => [name, groups[name]] as const)
-    .filter(([, items]) => items.length > 0);
+  const activeGroups = GROUP_ORDER.map(
+    (name) => [name, groups[name]] as const,
+  ).filter(([, items]) => items.length > 0);
 
   return (
     <div
@@ -319,14 +337,14 @@ export const CategoryModal = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[85vh] m-4 overflow-y-auto"
+        className="bg-card text-card-foreground rounded-lg shadow-xl w-full max-w-6xl max-h-[85vh] m-4 overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b">
+        <div className="flex justify-between items-center p-4 border-b border-border">
           <h2 className="text-xl font-bold">依分類瀏覽</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X size={24} />
           </button>
@@ -335,7 +353,7 @@ export const CategoryModal = ({
           {activeGroups.map(([groupName, items]) => (
             <div key={groupName} className="space-y-2">
               {GROUP_LABELS[groupName] && (
-                <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide border-b pb-1">
+                <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide border-b border-border pb-1">
                   {GROUP_LABELS[groupName]}
                 </h3>
               )}
@@ -344,7 +362,7 @@ export const CategoryModal = ({
                   <button
                     key={cat}
                     onClick={() => onSelect(cat)}
-                    className="w-full text-left px-2 py-1.5 rounded hover:bg-blue-100 text-blue-700 text-sm"
+                    className="w-full text-left px-2 py-1.5 rounded hover:bg-accent text-blue-600 text-sm"
                   >
                     {cat}
                   </button>

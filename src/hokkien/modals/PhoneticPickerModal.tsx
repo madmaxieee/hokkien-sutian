@@ -186,8 +186,8 @@ export const PhoneticPickerModal = ({
         selected
           ? "bg-blue-600 text-white"
           : available
-            ? "bg-gray-100 hover:bg-blue-100 text-gray-700"
-            : "bg-gray-50 text-gray-300 cursor-not-allowed"
+            ? "bg-muted hover:bg-accent text-foreground"
+            : "bg-muted/40 text-muted-foreground/60 cursor-not-allowed"
       }`}
     >
       {children}
@@ -200,14 +200,14 @@ export const PhoneticPickerModal = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] m-4 overflow-y-auto"
+        className="bg-card text-card-foreground rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] m-4 overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+        <div className="flex justify-between items-center p-4 border-b border-border sticky top-0 bg-card">
           <h2 className="text-xl font-bold">聲韻調查詢</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X size={24} />
           </button>
@@ -216,7 +216,7 @@ export const PhoneticPickerModal = ({
         <div className="p-4 space-y-6">
           {/* Initial Consonants */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+            <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               聲母 (Initial)
               {selectedInitial && (
                 <span className="ml-2 text-blue-600">
@@ -251,7 +251,7 @@ export const PhoneticPickerModal = ({
 
           {/* Finals */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+            <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               韻母 (Final)
               {selectedFinal && (
                 <span className="ml-2 text-blue-600">: {selectedFinal}</span>
@@ -275,7 +275,7 @@ export const PhoneticPickerModal = ({
 
           {/* Tones */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
+            <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               聲調 (Tone)
               {selectedTone && (
                 <span className="ml-2 text-blue-600">
@@ -306,35 +306,35 @@ export const PhoneticPickerModal = ({
                 type="checkbox"
                 checked={singleSyllableOnly}
                 onChange={(e) => setSingleSyllableOnly(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                className="w-4 h-4 text-blue-600 rounded border-border focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-foreground">
                 僅顯示單音節詞（單字）
               </span>
             </label>
           </div>
 
           {/* Preview */}
-          <div className="border-t pt-4">
+          <div className="border-t border-border pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-gray-600">符合條件: </span>
+                <span className="text-muted-foreground">符合條件: </span>
                 <span className="font-bold text-lg text-blue-600">
                   {matchCount.toLocaleString()}
                 </span>
-                <span className="text-gray-600"> 筆</span>
+                <span className="text-muted-foreground"> 筆</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-4 py-2 text-muted-foreground hover:bg-accent rounded-lg transition-colors"
                 >
                   重設
                 </button>
                 <button
                   onClick={handleSearch}
                   disabled={matchCount === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
                 >
                   查詢
                 </button>

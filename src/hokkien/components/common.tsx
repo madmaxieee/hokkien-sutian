@@ -43,7 +43,7 @@ export const CopyButton = ({ textToCopy }: { textToCopy: string }) => {
     <button
       onClick={handleCopy}
       title={`Copy "${cleanedText}"`}
-      className="text-gray-400 hover:text-blue-600 transition-colors relative"
+      className="text-muted-foreground hover:text-blue-600 transition-colors relative"
     >
       {copied ? (
         <Check size={16} className="text-green-500" />
@@ -66,7 +66,7 @@ export const SuiSiannLink = ({ text }: { text: string }) => {
       target="_blank"
       rel="noopener noreferrer"
       title="在「鬥拍字」中查看/朗讀"
-      className="text-gray-400 hover:text-red-500 transition-colors"
+      className="text-muted-foreground hover:text-red-500 transition-colors"
       onClick={(e) => e.stopPropagation()}
     >
       <ExternalLink size={16} />
@@ -87,7 +87,9 @@ export const CopyableText = ({
     className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"} ${className ?? ""}`.trim()}
   >
     <span>{text}</span>
-    <div className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}>
+    <div
+      className={`flex items-center gap-2 ${alwaysShowButtons ? "" : "opacity-0 group-hover:opacity-100 transition-opacity"}`}
+    >
       <CopyButton textToCopy={text} />
       <SuiSiannLink text={text} />
     </div>
@@ -106,7 +108,7 @@ export const DetailSection = ({
 
   return (
     <div className="flex items-start mt-2">
-      <strong className="font-semibold text-gray-600 w-24 flex-shrink-0">
+      <strong className="font-semibold text-muted-foreground w-24 flex-shrink-0">
         {title}:
       </strong>
       <div className="flex-grow flex flex-wrap gap-x-4 gap-y-1">{children}</div>
@@ -116,14 +118,21 @@ export const DetailSection = ({
 
 export const StyledRadio = ({
   label,
+  afterLabel,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
-  <label className="flex items-center space-x-2 cursor-pointer text-gray-700">
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  afterLabel?: React.ReactNode;
+}) => (
+  <label className="flex items-center space-x-2 cursor-pointer text-foreground">
     <input type="radio" className="sr-only peer" {...props} />
-    <span className="w-5 h-5 rounded-full border-2 border-gray-300 bg-white peer-checked:border-blue-600 flex items-center justify-center transition">
+    <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
       <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150"></span>
     </span>
-    <span>{label}</span>
+    <span className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      {afterLabel}
+    </span>
   </label>
 );
 
@@ -131,9 +140,9 @@ export const StyledCheckbox = ({
   label,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
-  <label className="flex items-center space-x-2 cursor-pointer text-sm text-gray-700">
+  <label className="flex items-center space-x-2 cursor-pointer text-sm text-foreground">
     <input type="checkbox" className="sr-only peer" {...props} />
-    <span className="w-4 h-4 rounded border-2 border-gray-300 bg-white peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-colors">
+    <span className="w-4 h-4 rounded border-2 border-border bg-background peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-colors">
       <Check
         size={12}
         className="text-white scale-0 peer-checked:scale-100 transition-transform duration-150"
