@@ -16,7 +16,9 @@ import { ResultCard } from "./components/ResultCard";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
 import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
-import { SettingsModal } from "./modals/SettingsModal";
+import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
+
+const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 
 const HokkienDictionary = () => {
   const [db, setDb] = useState<Database | null>(null);
@@ -32,9 +34,54 @@ const HokkienDictionary = () => {
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [forceSingleColumn, setForceSingleColumn] = useState(false);
   const [alwaysShowButtons, setAlwaysShowButtons] = useState(true);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "system";
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === "light" || saved === "dark" || saved === "system"
+      ? saved
+      : "system";
+  });
   const [isSingleEntryView, setIsSingleEntryView] = useState(false);
   const [toneGroups, setToneGroups] = useState<ToneGroup[]>([]);
   const [isPhoneticSearch, setIsPhoneticSearch] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    } catch {
+      // Ignore storage errors (private mode, disabled storage, etc.)
+    }
+  }, [themeMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const root = window.document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const shouldUseDark =
+        themeMode === "dark" || (themeMode === "system" && media.matches);
+      root.classList.toggle("dark", shouldUseDark);
+    };
+
+    applyTheme();
+
+    if (themeMode !== "system") return;
+
+    const onChange = () => applyTheme();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+
+    // Safari < 14
+    // eslint-disable-next-line deprecation/deprecation
+    media.addListener(onChange);
+    // eslint-disable-next-line deprecation/deprecation
+    return () => media.removeListener(onChange);
+  }, [themeMode]);
 
   const queryKeyToMode = useMemo(
     () => ({
@@ -757,16 +804,14 @@ const HokkienDictionary = () => {
   if (error && !db) return <ErrorMessage>{error}</ErrorMessage>;
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 font-sans bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 md:p-8 font-sans bg-background text-foreground min-h-screen">
       <div className="max-w-7xl mx-auto">
         <a
           href="/"
           onClick={handleTitleClick}
           className="text-center block cursor-pointer"
         >
-          <h1 className="text-4xl font-bold text-center mb-2 text-gray-800">
-            閩南語辭典
-          </h1>
+          <h1 className="text-4xl font-bold text-center mb-2">閩南語辭典</h1>
         </a>
 
         {!isSingleEntryView && (
@@ -774,28 +819,28 @@ const HokkienDictionary = () => {
             <div className="flex justify-center gap-4 mb-6 flex-wrap">
               <button
                 onClick={handleRandomWord}
-                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-accent transition-colors"
               >
                 <Shuffle size={18} />
                 隨機一詞
               </button>
               <button
                 onClick={() => setCategoryModalOpen(true)}
-                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-accent transition-colors"
               >
                 <Menu size={18} />
                 依分類瀏覽
               </button>
               <button
                 onClick={() => setPhoneticModalOpen(true)}
-                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm hover:bg-accent transition-colors"
               >
                 <Music size={18} />
                 聲韻調查詢
               </button>
               <button
                 onClick={() => setSettingsModalOpen(true)}
-                className="flex items-center gap-2 bg-white text-gray-600 px-4 py-2 rounded-full shadow-sm hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 bg-card text-muted-foreground px-4 py-2 rounded-full shadow-sm hover:bg-accent transition-colors"
               >
                 <Settings size={18} />
                 設定
@@ -817,7 +862,7 @@ const HokkienDictionary = () => {
   */}
             <div className="max-w-4xl mx-auto mb-4">
               <form onSubmit={handleSearchSubmit}>
-                <div className="flex flex-col sm:flex-row items-center bg-white rounded-full shadow-lg overflow-hidden p-2">
+                <div className="flex flex-col sm:flex-row items-center bg-card rounded-full shadow-lg overflow-hidden p-2 border border-border">
                   <input
                     type="search"
                     value={searchTerm}
@@ -846,7 +891,7 @@ const HokkienDictionary = () => {
                       }
                     }}
                     placeholder="輸入查詢詞..."
-                    className="w-full sm:flex-grow p-3 text-lg text-gray-700 focus:outline-none"
+                    className="w-full sm:flex-grow p-3 text-lg bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
                   />
                   <button
                     type="submit"
@@ -859,7 +904,7 @@ const HokkienDictionary = () => {
                 <div className="mt-4 space-y-2">
                   {searchModeGroups.map((group) => (
                     <div key={group.group}>
-                      <p className="text-sm font-semibold text-gray-500 text-center mb-1">
+                      <p className="text-sm font-semibold text-muted-foreground text-center mb-1">
                         {group.group}
                       </p>
                       <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
@@ -897,13 +942,13 @@ const HokkienDictionary = () => {
           (searchTerm || isSingleEntryView) &&
           !searchTerm.startsWith("(隨機)") &&
           !searchTerm.startsWith("[聲韻調]") && (
-            <p className="text-center text-gray-500">查無結果。</p>
+            <p className="text-center text-muted-foreground">查無結果。</p>
           )}
 
         {!searching &&
           toneGroups.length === 0 &&
           searchTerm.startsWith("[聲韻調]") && (
-            <p className="text-center text-gray-500">查無結果。</p>
+            <p className="text-center text-muted-foreground">查無結果。</p>
           )}
 
         {/* Phonetic search: show grouped by tone */}
@@ -960,6 +1005,8 @@ const HokkienDictionary = () => {
         onForceSingleColumnChange={setForceSingleColumn}
         alwaysShowButtons={alwaysShowButtons}
         onAlwaysShowButtonsChange={setAlwaysShowButtons}
+        themeMode={themeMode}
+        onThemeModeChange={setThemeMode}
       />
     </div>
   );

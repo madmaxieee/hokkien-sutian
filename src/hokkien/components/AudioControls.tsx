@@ -43,14 +43,14 @@ export const AudioControls = ({ entryId }: { entryId: number | null }) => {
       <button
         onClick={playAudio}
         title="Play"
-        className="text-gray-400 hover:text-blue-600 transition-colors"
+        className="text-muted-foreground hover:text-blue-600 transition-colors"
       >
         <Volume2 size={16} />
       </button>
       <button
         onClick={downloadAudio}
         title="Download"
-        className="text-gray-400 hover:text-blue-600 transition-colors"
+        className="text-muted-foreground hover:text-blue-600 transition-colors"
       >
         <Download size={16} />
       </button>

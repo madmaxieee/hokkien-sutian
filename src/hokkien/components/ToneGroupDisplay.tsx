@@ -15,14 +15,14 @@ export const ToneGroupDisplay = ({
       {groups.map((group) => (
         <div
           key={group.tone}
-          className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden"
+          className="border border-border rounded-lg bg-card text-card-foreground shadow-sm overflow-hidden"
         >
-          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+          <div className="bg-accent px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
               <span className="text-lg font-bold text-blue-600 font-mono">
                 {group.syllable}
               </span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-muted-foreground">
                 {TONE_LABELS[group.tone]} ({group.entries.length}字)
               </span>
             </div>
@@ -33,7 +33,7 @@ export const ToneGroupDisplay = ({
                 <button
                   key={entry.id}
                   onClick={() => onEntryClick(entry.id)}
-                  className="text-2xl hover:bg-blue-50 hover:text-blue-700 px-2 py-1 rounded transition-colors"
+                  className="text-2xl hover:bg-accent hover:text-blue-700 px-2 py-1 rounded transition-colors"
                   title={`${entry.hanzi} (${entry.romanization})`}
                 >
                   {entry.hanzi.replace(/【.*?】/g, "").trim()}

@@ -21,8 +21,10 @@ export const ResultCard = ({
   onCategoryClick: (category: string) => void;
   alwaysShowButtons?: boolean;
 }) => {
+  const hasMeanings = (result.meanings?.length ?? 0) > 0;
+
   return (
-    <div className="border border-gray-200 rounded-lg p-6 mb-8 shadow-sm bg-white break-inside-avoid-column">
+    <div className="border border-border rounded-lg p-6 mb-8 shadow-sm bg-card text-card-foreground break-inside-avoid-column">
       <div
         className={`inline-flex items-center gap-2 ${alwaysShowButtons ? "" : "group"}`}
       >
@@ -32,7 +34,7 @@ export const ResultCard = ({
           rel="noopener noreferrer"
           className="hover:underline"
         >
-          <h2 className="text-4xl font-bold text-gray-800 mb-1 inline-block">
+          <h2 className="text-4xl font-bold mb-1 inline-block">
             {result.hanzi}
           </h2>
         </a>
@@ -44,7 +46,7 @@ export const ResultCard = ({
           <button
             onClick={() => onPermalinkClick(result.id)}
             title="Link to this entry"
-            className="text-gray-400 hover:text-blue-600 transition-colors"
+            className="text-muted-foreground hover:text-blue-600 transition-colors"
           >
             <LinkIcon size={16} />
           </button>
@@ -59,71 +61,85 @@ export const ResultCard = ({
         <AudioControls entryId={result.audio_file ? result.id : null} />
       </div>
 
-      <div className="space-y-5">
-        {result.meanings?.map((meaning) => (
-          <div key={meaning.id} className="border-t pt-4 first:border-t-0">
-            <div className="flex items-start">
-              <span className="text-gray-500 mr-2">{meaning.display_id}.</span>
-              <div className="flex-grow">
-                <p className="text-lg text-gray-800">
-                  {meaning.part_of_speech && (
-                    <strong className="font-semibold">
-                      {meaning.part_of_speech}
-                    </strong>
+      {hasMeanings && (
+        <div className="space-y-5">
+          {result.meanings?.map((meaning) => (
+            <div
+              key={meaning.id}
+              className="border-t border-border pt-4 first:border-t-0"
+            >
+              <div className="flex items-start">
+                <span className="text-muted-foreground mr-2">
+                  {meaning.display_id}.
+                </span>
+                <div className="flex-grow">
+                  <p className="text-lg">
+                    {meaning.part_of_speech && (
+                      <strong className="font-semibold">
+                        {meaning.part_of_speech}
+                      </strong>
+                    )}
+                    {` ${meaning.explanation.replace(/^:/, "").trim()}`}
+                  </p>
+                  {result.meaning_synonyms?.has(meaning.id) && (
+                    <div className="mt-3 pl-4">
+                      <span className="text-muted-foreground text-sm">
+                        近義：
+                      </span>
+                      {result.meaning_synonyms
+                        .get(meaning.id)
+                        ?.map((syn, i, arr) => (
+                          <span key={syn.meaningId}>
+                            <button
+                              onClick={() => onPermalinkClick(syn.entryId)}
+                              className="text-blue-600 hover:underline"
+                            >
+                              {syn.hanzi}
+                            </button>
+                            {i < arr.length - 1 && (
+                              <span className="text-muted-foreground/70">
+                                、
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                    </div>
                   )}
-                  {` ${meaning.explanation.replace(/^:/, "").trim()}`}
-                </p>
-                {result.meaning_synonyms?.has(meaning.id) && (
-                  <div className="mt-3 pl-4">
-                    <span className="text-gray-500 text-sm">近義：</span>
-                    {result.meaning_synonyms
-                      .get(meaning.id)
-                      ?.map((syn, i, arr) => (
-                        <span key={syn.meaningId}>
-                          <button
-                            onClick={() => onPermalinkClick(syn.entryId)}
-                            className="text-blue-600 hover:underline"
-                          >
-                            {syn.hanzi}
-                          </button>
-                          {i < arr.length - 1 && (
-                            <span className="text-gray-400">、</span>
-                          )}
-                        </span>
-                      ))}
-                  </div>
-                )}
-                {meaning.examples?.length > 0 && (
-                  <div className="mt-2 pl-4 border-l-2 border-blue-100">
-                    <h4 className="font-semibold text-gray-600">用例:</h4>
-                    <ul className="list-none space-y-3 mt-1">
-                      {meaning.examples.map((ex, index) => (
-                        <li key={index} className="flex flex-col">
-                          <CopyableText
-                            text={ex.hanzi}
-                            className="text-gray-800"
-                            alwaysShowButtons={alwaysShowButtons}
-                          />
-                          <CopyableText
-                            text={ex.romanization}
-                            className="text-blue-500 font-mono text-sm"
-                            alwaysShowButtons={alwaysShowButtons}
-                          />
-                          <p className="text-gray-500 text-sm">
-                            ({ex.mandarin_translation})
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                  {meaning.examples?.length > 0 && (
+                    <div className="mt-2 pl-4 border-l-2 border-border">
+                      <h4 className="font-semibold text-muted-foreground">
+                        用例:
+                      </h4>
+                      <ul className="list-none space-y-3 mt-1">
+                        {meaning.examples.map((ex, index) => (
+                          <li key={index} className="flex flex-col">
+                            <CopyableText
+                              text={ex.hanzi}
+                              alwaysShowButtons={alwaysShowButtons}
+                            />
+                            <CopyableText
+                              text={ex.romanization}
+                              className="text-blue-500 font-mono text-sm"
+                              alwaysShowButtons={alwaysShowButtons}
+                            />
+                            <p className="text-muted-foreground text-sm">
+                              ({ex.mandarin_translation})
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <div className="mt-6 border-t pt-4 text-sm text-gray-500 space-y-1">
+      <div
+        className={`${hasMeanings ? "mt-6 border-t border-border pt-4" : "mt-4"} text-sm text-muted-foreground space-y-1`}
+      >
         <DetailSection title="又唸作">
           {result.alternative_pronunciations?.map((alt, i) => (
             <span key={i} className="text-blue-600">
@@ -164,7 +180,7 @@ export const ResultCard = ({
                   {cat}
                 </button>
                 {i < arr.length - 1 && (
-                  <span className="text-gray-400">、</span>
+                  <span className="text-muted-foreground/70">、</span>
                 )}
               </span>
             ))}
