@@ -17,7 +17,7 @@ const IOStoggle = ({ label, checked, onChange }: ToggleProps) => (
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-        checked ? "bg-blue-600" : "bg-muted"
+        checked ? "bg-blue-600 dark:bg-blue-500" : "bg-muted"
       }`}
     >
       <span
@@ -95,8 +95,8 @@ export const SettingsModal = ({
                     checked={themeMode === "system"}
                     onChange={() => onThemeModeChange("system")}
                   />
-                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150" />
+                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 dark:peer-checked:border-blue-400 flex items-center justify-center transition">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-blue-400 scale-0 peer-checked:scale-100 transition-transform duration-150" />
                   </span>
                   <span className="text-foreground">跟隨系統 (System)</span>
                 </label>
@@ -110,8 +110,8 @@ export const SettingsModal = ({
                     checked={themeMode === "light"}
                     onChange={() => onThemeModeChange("light")}
                   />
-                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150" />
+                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 dark:peer-checked:border-blue-400 flex items-center justify-center transition">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-blue-400 scale-0 peer-checked:scale-100 transition-transform duration-150" />
                   </span>
                   <span className="text-foreground">淺色 (Light)</span>
                 </label>
@@ -125,8 +125,8 @@ export const SettingsModal = ({
                     checked={themeMode === "dark"}
                     onChange={() => onThemeModeChange("dark")}
                   />
-                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150" />
+                  <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 dark:peer-checked:border-blue-400 flex items-center justify-center transition">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-blue-400 scale-0 peer-checked:scale-100 transition-transform duration-150" />
                   </span>
                   <span className="text-foreground">深色 (Dark)</span>
                 </label>

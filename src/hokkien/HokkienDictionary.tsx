@@ -934,21 +934,21 @@ const HokkienDictionary = () => {
             <div className="flex justify-center gap-4 mb-6 flex-wrap">
               <button
                 onClick={handleRandomWord}
-                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 dark:text-blue-400 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
               >
                 <Shuffle size={18} />
                 隨機一詞
               </button>
               <button
                 onClick={() => setCategoryModalOpen(true)}
-                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 dark:text-blue-400 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
               >
                 <Menu size={18} />
                 依分類瀏覽
               </button>
               <button
                 onClick={() => setPhoneticModalOpen(true)}
-                className="flex items-center gap-2 bg-card text-blue-600 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
+                className="flex items-center gap-2 bg-card text-blue-600 dark:text-blue-400 px-4 py-2 rounded-full shadow-sm border border-border hover:bg-accent transition-colors"
               >
                 <Music size={18} />
                 聲韻調查詢
@@ -1017,7 +1017,7 @@ const HokkienDictionary = () => {
                   />
                   <button
                     type="submit"
-                    className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 m-1 sm:m-0 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-full p-3 m-1 sm:m-0 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-500"
                   >
                     <Search size={24} />
                   </button>

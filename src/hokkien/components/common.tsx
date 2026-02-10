@@ -3,7 +3,7 @@ import { AlertCircle, Check, Copy, ExternalLink, Loader } from "lucide-react";
 
 export const Spinner = () => (
   <div className="flex justify-center items-center p-8">
-    <Loader className="animate-spin text-blue-500" size={48} />
+    <Loader className="animate-spin text-blue-500 dark:text-blue-400" size={48} />
   </div>
 );
 
@@ -43,7 +43,7 @@ export const CopyButton = ({ textToCopy }: { textToCopy: string }) => {
     <button
       onClick={handleCopy}
       title={`Copy "${cleanedText}"`}
-      className="text-muted-foreground hover:text-blue-600 transition-colors relative"
+      className="text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors relative"
     >
       {copied ? (
         <Check size={16} className="text-green-500" />
@@ -126,8 +126,8 @@ export const StyledRadio = ({
 }) => (
   <label className="flex items-center space-x-2 cursor-pointer text-foreground">
     <input type="radio" className="sr-only peer" {...props} />
-    <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 flex items-center justify-center transition">
-      <span className="w-2.5 h-2.5 rounded-full bg-blue-600 scale-0 peer-checked:scale-100 transition-transform duration-150"></span>
+    <span className="w-5 h-5 rounded-full border-2 border-border bg-background peer-checked:border-blue-600 dark:peer-checked:border-blue-400 flex items-center justify-center transition">
+      <span className="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-blue-400 scale-0 peer-checked:scale-100 transition-transform duration-150"></span>
     </span>
     <span className="inline-flex items-center gap-1">
       <span>{label}</span>
@@ -142,7 +142,7 @@ export const StyledCheckbox = ({
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
   <label className="flex items-center space-x-2 cursor-pointer text-sm text-foreground">
     <input type="checkbox" className="sr-only peer" {...props} />
-    <span className="w-4 h-4 rounded border-2 border-border bg-background peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-colors">
+    <span className="w-4 h-4 rounded border-2 border-border bg-background peer-checked:bg-blue-600 dark:peer-checked:bg-blue-500 peer-checked:border-blue-600 dark:peer-checked:border-blue-500 flex items-center justify-center transition-colors">
       <Check
         size={12}
         className="text-white scale-0 peer-checked:scale-100 transition-transform duration-150"

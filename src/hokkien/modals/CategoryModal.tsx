@@ -362,7 +362,7 @@ export const CategoryModal = ({
                   <button
                     key={cat}
                     onClick={() => onSelect(cat)}
-                    className="w-full text-left px-2 py-1.5 rounded hover:bg-accent text-blue-600 text-sm"
+                    className="w-full text-left px-2 py-1.5 rounded hover:bg-accent text-blue-600 dark:text-blue-400 text-sm"
                   >
                     {cat}
                   </button>

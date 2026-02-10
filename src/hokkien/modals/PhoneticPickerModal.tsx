@@ -184,7 +184,7 @@ export const PhoneticPickerModal = ({
       disabled={!available && !selected}
       className={`px-2 py-1 rounded text-sm font-mono transition-colors ${
         selected
-          ? "bg-blue-600 text-white"
+          ? "bg-blue-600 dark:bg-blue-500 text-white"
           : available
             ? "bg-muted hover:bg-accent text-foreground"
             : "bg-muted/40 text-muted-foreground/60 cursor-not-allowed"
@@ -219,7 +219,7 @@ export const PhoneticPickerModal = ({
             <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               聲母 (Initial)
               {selectedInitial && (
-                <span className="ml-2 text-blue-600">
+                <span className="ml-2 text-blue-600 dark:text-blue-400">
                   : {selectedInitial === "ling" ? "零聲母" : selectedInitial}
                 </span>
               )}
@@ -254,7 +254,7 @@ export const PhoneticPickerModal = ({
             <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               韻母 (Final)
               {selectedFinal && (
-                <span className="ml-2 text-blue-600">: {selectedFinal}</span>
+                <span className="ml-2 text-blue-600 dark:text-blue-400">: {selectedFinal}</span>
               )}
             </h3>
             <div className="flex flex-wrap gap-1">
@@ -278,7 +278,7 @@ export const PhoneticPickerModal = ({
             <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               聲調 (Tone)
               {selectedTone && (
-                <span className="ml-2 text-blue-600">
+                <span className="ml-2 text-blue-600 dark:text-blue-400">
                   : {TONE_LABELS[selectedTone]}
                 </span>
               )}
@@ -306,7 +306,7 @@ export const PhoneticPickerModal = ({
                 type="checkbox"
                 checked={singleSyllableOnly}
                 onChange={(e) => setSingleSyllableOnly(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded border-border focus:ring-blue-500"
+                className="w-4 h-4 text-blue-600 dark:text-blue-400 rounded border-border focus:ring-blue-500"
               />
               <span className="text-sm text-foreground">
                 僅顯示單音節詞（單字）
@@ -319,7 +319,7 @@ export const PhoneticPickerModal = ({
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-muted-foreground">符合條件: </span>
-                <span className="font-bold text-lg text-blue-600">
+                <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
                   {matchCount.toLocaleString()}
                 </span>
                 <span className="text-muted-foreground"> 筆</span>
@@ -334,7 +334,7 @@ export const PhoneticPickerModal = ({
                 <button
                   onClick={handleSearch}
                   disabled={matchCount === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
                 >
                   查詢
                 </button>

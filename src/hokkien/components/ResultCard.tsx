@@ -47,14 +47,14 @@ export const ResultCard = memo(({
           <button
             onClick={() => onPermalinkClick(result.id)}
             title="Link to this entry"
-            className="text-muted-foreground hover:text-blue-600 transition-colors"
+            className="text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
             <LinkIcon size={16} />
           </button>
         </div>
       </div>
 
-      <div className="flex items-center text-xl text-blue-600 font-mono mb-4">
+      <div className="flex items-center text-xl text-blue-600 dark:text-blue-400 font-mono mb-4">
         <CopyableText
           text={result.romanization}
           alwaysShowButtons={alwaysShowButtons}
@@ -93,7 +93,7 @@ export const ResultCard = memo(({
                           <span key={syn.meaningId}>
                             <button
                               onClick={() => onPermalinkClick(syn.entryId)}
-                              className="text-blue-600 hover:underline"
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
                             >
                               {syn.hanzi}
                             </button>
@@ -120,7 +120,7 @@ export const ResultCard = memo(({
                             />
                             <CopyableText
                               text={ex.romanization}
-                              className="text-blue-500 font-mono text-sm"
+                              className="text-blue-500 dark:text-blue-400 font-mono text-sm"
                               alwaysShowButtons={alwaysShowButtons}
                             />
                             <p className="text-muted-foreground text-sm">
@@ -143,7 +143,7 @@ export const ResultCard = memo(({
       >
         <DetailSection title="又唸作">
           {result.alternative_pronunciations?.map((alt, i) => (
-            <span key={i} className="text-blue-600">
+            <span key={i} className="text-blue-600 dark:text-blue-400">
               <CopyableText
                 text={alt.romanization}
                 alwaysShowButtons={alwaysShowButtons}
@@ -161,7 +161,7 @@ export const ResultCard = memo(({
             <button
               key={syn.id}
               onClick={() => onPermalinkClick(syn.id)}
-              className="text-blue-600 hover:underline mr-2"
+              className="text-blue-600 dark:text-blue-400 hover:underline mr-2"
             >
               {syn.hanzi}
             </button>
@@ -176,7 +176,7 @@ export const ResultCard = memo(({
               <span key={cat}>
                 <button
                   onClick={() => onCategoryClick(cat)}
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   {cat}
                 </button>

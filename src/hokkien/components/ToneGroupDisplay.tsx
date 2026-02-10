@@ -20,7 +20,7 @@ export const ToneGroupDisplay = memo(({
         >
           <div className="bg-accent px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
-              <span className="text-lg font-bold text-blue-600 font-mono">
+              <span className="text-lg font-bold text-blue-600 dark:text-blue-400 font-mono">
                 {group.syllable}
               </span>
               <span className="text-sm text-muted-foreground">
@@ -34,7 +34,7 @@ export const ToneGroupDisplay = memo(({
                 <button
                   key={entry.id}
                   onClick={() => onEntryClick(entry.id)}
-                  className="text-2xl hover:bg-accent hover:text-blue-700 px-2 py-1 rounded transition-colors"
+                  className="text-2xl hover:bg-accent hover:text-blue-700 dark:hover:text-blue-300 px-2 py-1 rounded transition-colors"
                   title={`${entry.hanzi} (${entry.romanization})`}
                 >
                   {entry.hanzi.replace(/【.*?】/g, "").trim()}
