@@ -1,7 +1,8 @@
+import { memo } from "react";
 import type { ToneGroup } from "../types";
 import { TONE_LABELS } from "../phonetics";
 
-export const ToneGroupDisplay = ({
+export const ToneGroupDisplay = memo(({
   groups,
   onEntryClick,
 }: {
@@ -45,4 +46,6 @@ export const ToneGroupDisplay = ({
       ))}
     </div>
   );
-};
+});
+
+ToneGroupDisplay.displayName = "ToneGroupDisplay";

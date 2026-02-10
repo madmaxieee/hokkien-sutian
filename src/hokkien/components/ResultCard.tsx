@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link as LinkIcon } from "lucide-react";
 
 import type { Result } from "../types";
@@ -10,7 +11,7 @@ import {
 } from "./common";
 import { PhoneticDifferencesTable } from "./PhoneticDifferencesTable";
 
-export const ResultCard = ({
+export const ResultCard = memo(({
   result,
   onPermalinkClick,
   onCategoryClick,
@@ -193,4 +194,6 @@ export const ResultCard = ({
       />
     </div>
   );
-};
+});
+
+ResultCard.displayName = "ResultCard";

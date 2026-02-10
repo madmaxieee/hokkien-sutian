@@ -28,7 +28,7 @@ import type {
   ToneGroup,
 } from "./types";
 import { ErrorMessage, Spinner, StyledRadio } from "./components/common";
-import { ResultCard } from "./components/ResultCard";
+import { ResultsList } from "./components/ResultsList";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
 import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
@@ -374,7 +374,7 @@ const HokkienDictionary = () => {
     setSearching(false);
   }, [db, fetchEntryDetails]);
 
-  const handleCategorySelect = (category: string) => {
+  const handleCategorySelect = useCallback((category: string) => {
     setIsSingleEntryView(false);
     setCategoryModalOpen(false);
     setIsPhoneticSearch(false);
@@ -386,9 +386,9 @@ const HokkienDictionary = () => {
     window.history.pushState({ path: newUrl }, "", newUrl);
 
     performSearch(category, "category");
-  };
+  }, [performSearch]);
 
-  const handleCategoryClick = (category: string) => {
+  const handleCategoryClick = useCallback((category: string) => {
     setIsSingleEntryView(false);
     setIsPhoneticSearch(false);
     setToneGroups([]);
@@ -399,7 +399,7 @@ const HokkienDictionary = () => {
     window.history.pushState({ path: newUrl }, "", newUrl);
 
     performSearch(category, "category");
-  };
+  }, [performSearch]);
 
   const handlePhoneticSearch = useCallback(
     (query: PhoneticQuery, _resultCount: number) => {
@@ -545,7 +545,7 @@ const HokkienDictionary = () => {
     }
   };
 
-  const handlePermalinkClick = (id: number) => {
+  const handlePermalinkClick = useCallback((id: number) => {
     const newUrl = `${window.location.pathname}?su=${id}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
 
@@ -554,7 +554,7 @@ const HokkienDictionary = () => {
 
     const result = fetchEntryDetails(id);
     setResults(result ? [result] : []);
-  };
+  }, [fetchEntryDetails]);
 
   const handleTitleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -1099,24 +1099,14 @@ const HokkienDictionary = () => {
 
         {/* Regular search or single entry view: show cards */}
         {(!isPhoneticSearch || isSingleEntryView) && (
-          <div
-            data-testid="results-container"
-            className={`transition-all duration-500 ${
-              isSingleEntryView || forceSingleColumn || results.length <= 1
-                ? "max-w-4xl mx-auto"
-                : "lg:columns-2 lg:gap-x-8"
-            }`}
-          >
-            {results.map((result) => (
-              <ResultCard
-                key={`${result.id}-${result.hanzi}`}
-                result={result}
-                onPermalinkClick={handlePermalinkClick}
-                onCategoryClick={handleCategoryClick}
-                alwaysShowButtons={alwaysShowButtons}
-              />
-            ))}
-          </div>
+          <ResultsList
+            results={results}
+            onPermalinkClick={handlePermalinkClick}
+            onCategoryClick={handleCategoryClick}
+            alwaysShowButtons={alwaysShowButtons}
+            isSingleEntryView={isSingleEntryView}
+            forceSingleColumn={forceSingleColumn}
+          />
         )}
       </div>
 
