@@ -36,6 +36,28 @@ import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
 
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 
+type ModeHelpExampleLink = {
+  url: string;
+  label?: string;
+};
+
+type ModeHelpExample =
+  | string
+  | {
+      query: string;
+      note?: string;
+      links?: ModeHelpExampleLink[];
+    };
+
+type ModeHelpContent = {
+  title: string;
+  description: string;
+  how: string[];
+  examples: ModeHelpExample[];
+};
+
+type ModeHelpMap = Record<string, ModeHelpContent>;
+
 const HokkienDictionary = () => {
   const [db, setDb] = useState<Database | null>(null);
   const [results, setResults] = useState<Result[]>([]);
@@ -374,32 +396,38 @@ const HokkienDictionary = () => {
     setSearching(false);
   }, [db, fetchEntryDetails]);
 
-  const handleCategorySelect = useCallback((category: string) => {
-    setIsSingleEntryView(false);
-    setCategoryModalOpen(false);
-    setIsPhoneticSearch(false);
-    setToneGroups([]);
-    setSearchTerm(category);
-    setSearchMode("category");
+  const handleCategorySelect = useCallback(
+    (category: string) => {
+      setIsSingleEntryView(false);
+      setCategoryModalOpen(false);
+      setIsPhoneticSearch(false);
+      setToneGroups([]);
+      setSearchTerm(category);
+      setSearchMode("category");
 
-    const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
-    window.history.pushState({ path: newUrl }, "", newUrl);
+      const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+      window.history.pushState({ path: newUrl }, "", newUrl);
 
-    performSearch(category, "category");
-  }, [performSearch]);
+      performSearch(category, "category");
+    },
+    [performSearch],
+  );
 
-  const handleCategoryClick = useCallback((category: string) => {
-    setIsSingleEntryView(false);
-    setIsPhoneticSearch(false);
-    setToneGroups([]);
-    setSearchTerm(category);
-    setSearchMode("category");
+  const handleCategoryClick = useCallback(
+    (category: string) => {
+      setIsSingleEntryView(false);
+      setIsPhoneticSearch(false);
+      setToneGroups([]);
+      setSearchTerm(category);
+      setSearchMode("category");
 
-    const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
-    window.history.pushState({ path: newUrl }, "", newUrl);
+      const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+      window.history.pushState({ path: newUrl }, "", newUrl);
 
-    performSearch(category, "category");
-  }, [performSearch]);
+      performSearch(category, "category");
+    },
+    [performSearch],
+  );
 
   const handlePhoneticSearch = useCallback(
     (query: PhoneticQuery, _resultCount: number) => {
@@ -545,16 +573,19 @@ const HokkienDictionary = () => {
     }
   };
 
-  const handlePermalinkClick = useCallback((id: number) => {
-    const newUrl = `${window.location.pathname}?su=${id}`;
-    window.history.pushState({ path: newUrl }, "", newUrl);
+  const handlePermalinkClick = useCallback(
+    (id: number) => {
+      const newUrl = `${window.location.pathname}?su=${id}`;
+      window.history.pushState({ path: newUrl }, "", newUrl);
 
-    setIsSingleEntryView(true);
-    setIsPhoneticSearch(false);
+      setIsSingleEntryView(true);
+      setIsPhoneticSearch(false);
 
-    const result = fetchEntryDetails(id);
-    setResults(result ? [result] : []);
-  }, [fetchEntryDetails]);
+      const result = fetchEntryDetails(id);
+      setResults(result ? [result] : []);
+    },
+    [fetchEntryDetails],
+  );
 
   const handleTitleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -822,7 +853,14 @@ const HokkienDictionary = () => {
             "會同時比對：詞目的漢字（含【白】【文】等標記）與台羅拼寫。",
             "如果想找特定標記，也可以直接輸入【白】或【文】之類的字樣。",
           ],
-          examples: ["?q=食", "?q=tsia̍h", "?q=【白】"],
+          examples: [
+            "?q=袂",
+            "?q=嚨喉",
+            "?q=尻川",
+            "?q=食",
+            "?q=tsia̍h",
+            "?q=【白】",
+          ],
         },
         mandarin_example: {
           title: "用北平方言查用例",
@@ -882,9 +920,23 @@ const HokkienDictionary = () => {
             "比對方式是『詞目漢字完全相等』，不是包含式比對。",
             "建議輸入一整句漢字（少標點/少空白）來找出可能的詞目切分。",
           ],
-          examples: ["?qs=我欲食飯", "?qs=伊會曉講", "?qs=你欲去佗位"],
+          examples: [
+            "?qs=龍溪",
+            {
+              query: "?qs=嚨喉出力講袂出聲",
+              note: "源：傷心地獄芳花引魂",
+              links: [
+                {
+                  url: "https://www.youtube.com/watch?v=5vyT2qDmFhE",
+                },
+              ],
+            },
+            "?qs=我欲食飯",
+            "?qs=伊會曉講",
+            "?qs=你欲去佗位",
+          ],
         },
-      }) as const,
+      }) satisfies ModeHelpMap,
     [],
   );
 
@@ -1162,17 +1214,54 @@ const HokkienDictionary = () => {
                 <div className="space-y-1">
                   <p className="font-semibold">範例</p>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                    {activeModeHelpContent.examples.map((ex) => (
-                      <li key={ex}>
-                        <button
-                          type="button"
-                          className="font-mono underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                          onClick={() => applyExampleQuery(ex)}
-                        >
-                          {ex}
-                        </button>
-                      </li>
-                    ))}
+                    {activeModeHelpContent.examples.map((ex, idx) => {
+                      const query = typeof ex === "string" ? ex : ex.query;
+                      const note: string | undefined =
+                        typeof ex === "string" ? undefined : ex.note;
+                      const links: ModeHelpExampleLink[] | undefined =
+                        typeof ex === "string" ? undefined : ex.links;
+
+                      return (
+                        <li key={`${query}-${idx}`}>
+                          <button
+                            type="button"
+                            className="font-mono underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                            onClick={() => applyExampleQuery(query)}
+                          >
+                            {query}
+                          </button>
+                          {(note || (links && links.length > 0)) && (
+                            <div className="mt-1 space-y-1">
+                              {note && (
+                                <div className="text-xs text-muted-foreground">
+                                  {note}
+                                </div>
+                              )}
+                              {links && links.length > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  {links.map((link, linkIdx) => (
+                                    <React.Fragment
+                                      key={`${link.url}-${linkIdx}`}
+                                    >
+                                      {linkIdx > 0 ? " · " : null}
+                                      <a
+                                        href={link.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline underline-offset-4 hover:text-foreground"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {link.label ?? link.url}
+                                      </a>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               </div>
