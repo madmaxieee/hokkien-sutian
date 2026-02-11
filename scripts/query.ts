@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";

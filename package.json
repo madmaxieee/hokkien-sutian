@@ -119,5 +119,8 @@
     "@humanwhocodes/object-schema": "npm:@eslint/object-schema@latest",
     "inflight": "^2.0.1"
   },
-  "module": "index.ts"
+  "module": "index.ts",
+  "bin": {
+    "hokkien-sutian-query": "scripts/query.ts"
+  }
 }
