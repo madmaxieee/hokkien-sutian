@@ -98,6 +98,19 @@
           "note": "源：傷心地獄芳花引魂",
           "links": [{ "url": "https://www.youtube.com/watch?v=5vyT2qDmFhE" }],
         },
+        // 千秋萬世永其昌, src: https://www.youtube.com/watch?v=8KRKyU3rce0; song: 一身是膽趙子龍
+        {
+          "query": "?qs=千秋萬世永其昌",
+          "note": "源：一身是膽趙子龍",
+          "links": [{ "url": "https://www.youtube.com/watch?v=8KRKyU3rce0" }],
+        },
+        // 砲火 銃聲 獨裁者 邪氣 屍臭 魔神仔, 暮沉武德殿, https://www.youtube.com/watch?v=W_kFoBWkOAk
+        {
+          "query": "?qs=砲火 銃聲 獨裁者 邪氣 屍臭 魔神仔",
+          "note": "源：暮沉武德殿",
+          "links": [{ "url": "https://www.youtube.com/watch?v=W_kFoBWkOAk" }],
+        },
+
         "?qs=我欲來去食肉骨茶",
         "?qs=伊會曉講",
         "?qs=你欲去佗位",
