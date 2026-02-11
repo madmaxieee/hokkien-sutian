@@ -22,7 +22,10 @@ const DEFAULT_DB_PATH = `${DEFAULT_CACHE_DIR}/kautian.db`;
 const DEFAULT_SOURCE_URL = "https://sutian.teddysc.me/assets/data/kautian.db";
 
 const printUsage = () => {
-  console.log(`hokkien-sutian-query - Query the 臺灣閩南語常用詞典 database
+  console.log(`hokkien-sutian-query - Query the 閩南語詞典 database
+
+CLI: hokkien-sutian-query
+Web: https://sutian.teddysc.me
 
 Usage:
   hokkien-sutian-query -m <mode> -t <term> [options]
