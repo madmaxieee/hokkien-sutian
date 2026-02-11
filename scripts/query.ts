@@ -313,10 +313,9 @@ const resultToAlfredItem = (result: Result): AlfredScriptFilterItem => {
   const meaningText = result.meanings
     .map((m) => {
       const part = m.part_of_speech ? `${m.part_of_speech} ` : "";
-      return `${part}${m.explanation.replace(/^:/, "").trim()}`.trim();
+      return `${m.display_id}. ${part}${m.explanation.replace(/^:/, "").trim()}`.trim();
     })
     .filter(Boolean)
-    .slice(0, 3)
     .join("；");
 
   const subtitle = meaningText
@@ -437,9 +436,11 @@ const renderInkResults = async (payload: {
         ? h(Text, null, "(no results)")
         : results.map((r) => {
             const meaningText = r.meanings
-              .map((m) => m.explanation.replace(/^:/, "").trim())
+              .map((m) => {
+                const part = m.part_of_speech ? `${m.part_of_speech} ` : "";
+                return `${m.display_id}. ${part}${m.explanation.replace(/^:/, "").trim()}`.trim();
+              })
               .filter(Boolean)
-              .slice(0, 2)
               .join("；");
             const subtitle = meaningText
               ? trimForSingleLine(meaningText, 120)
