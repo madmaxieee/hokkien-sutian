@@ -899,7 +899,7 @@ const HokkienDictionary = () => {
             "比『用閩南語查詞目』更廣：例句裡出現的詞也會被命中。",
             "結果會合併去重。",
           ],
-          examples: ["?hft=食", "?hft=tsia̍h", "?hft=lí"],
+          examples: ["?hft=龍溪", "?hft=食", "?hft=tsia̍h", "?hft=lí"],
         },
         regex: {
           title: "正規表示式(詞目)",
@@ -922,6 +922,7 @@ const HokkienDictionary = () => {
           ],
           examples: [
             "?qs=龍溪",
+            "?qs=銅山",
             {
               query: "?qs=嚨喉出力講袂出聲",
               note: "源：傷心地獄芳花引魂",
