@@ -37,6 +37,23 @@ const DEFAULT_CACHE_DIR = `${process.env.HOME}/.cache/hokkien-sutian`;
 const DEFAULT_DB_PATH = `${DEFAULT_CACHE_DIR}/kautian.db`;
 const DEFAULT_SOURCE_URL = "https://sutian.teddysc.me/assets/data/kautian.db";
 const DEFAULT_APP_BASE_URL = "https://sutian.teddysc.me";
+const LOCAL_APP_BASE_URL = "http://hokkien-sutian.localhost:10390/";
+
+const resolveAppBaseUrl = (options: Record<string, unknown>): string => {
+  if (options.local === true) return LOCAL_APP_BASE_URL;
+
+  const envValue = process.env.HOKKIEN_SUTIAN_BASE_URL?.trim();
+  if (envValue) return envValue;
+
+  const optionValue =
+    typeof options.baseUrl === "string" ? options.baseUrl.trim() : "";
+  if (optionValue) return optionValue;
+
+  return DEFAULT_APP_BASE_URL;
+};
+
+const makeTerminalLink = (url: string, label: string) =>
+  `\u001b]8;;${url}\u0007${label}\u001b]8;;\u0007`;
 
 type ModeHelpExampleLink = { url: string; label?: string };
 type ModeHelpExample =
@@ -308,7 +325,10 @@ const trimForSingleLine = (value: string, max: number) => {
   return `${s.slice(0, Math.max(0, max - 1))}…`;
 };
 
-const resultToAlfredItem = (result: Result): AlfredScriptFilterItem => {
+const resultToAlfredItem = (
+  result: Result,
+  appBaseUrl: string,
+): AlfredScriptFilterItem => {
   const title = `${result.hanzi} ${result.romanization}`.trim();
   const meaningText = result.meanings
     .map((m) => {
@@ -322,7 +342,7 @@ const resultToAlfredItem = (result: Result): AlfredScriptFilterItem => {
     ? trimForSingleLine(meaningText, 160)
     : undefined;
 
-  const appUrl = getAppEntryUrl(DEFAULT_APP_BASE_URL, result.id);
+  const appUrl = getAppEntryUrl(appBaseUrl, result.id);
   const moeUrl = getMoeEntryUrl(result.id);
   const ithuanUrl = getSuiSiannUrl(result.hanzi);
 
@@ -382,8 +402,9 @@ const resultToAlfredItem = (result: Result): AlfredScriptFilterItem => {
 
 const resultsToAlfredOutput = (
   results: Result[],
+  appBaseUrl: string,
 ): AlfredScriptFilterOutput => ({
-  items: results.map(resultToAlfredItem),
+  items: results.map((result) => resultToAlfredItem(result, appBaseUrl)),
 });
 
 const renderInkResults = async (payload: {
@@ -391,6 +412,7 @@ const renderInkResults = async (payload: {
   term?: string | null;
   results?: Result[];
   toneGroups?: ToneGroup[];
+  appBaseUrl: string;
 }) => {
   const { render, Box, Text } = await import("ink");
   const h = React.createElement;
@@ -434,17 +456,9 @@ const renderInkResults = async (payload: {
       { flexDirection: "column", marginTop: 1 },
       results.length === 0
         ? h(Text, null, "(no results)")
-        : results.map((r) => {
-            const meaningText = r.meanings
-              .map((m) => {
-                const part = m.part_of_speech ? `${m.part_of_speech} ` : "";
-                return `${m.display_id}. ${part}${m.explanation.replace(/^:/, "").trim()}`.trim();
-              })
-              .filter(Boolean)
-              .join("；");
-            const subtitle = meaningText
-              ? trimForSingleLine(meaningText, 120)
-              : "";
+        : results.map((r, idx) => {
+            const appUrl = getAppEntryUrl(payload.appBaseUrl, r.id);
+            const idLink = makeTerminalLink(appUrl, `#${r.id}`);
 
             const titleLine = h(
               Text,
@@ -453,14 +467,89 @@ const renderInkResults = async (payload: {
               " ",
               h(Text, { dimColor: true }, r.romanization),
               " ",
-              h(Text, { dimColor: true }, `(#${r.id})`),
+              h(Text, { dimColor: true }, "("),
+              h(Text, { dimColor: true }, idLink),
+              h(Text, { dimColor: true }, ")"),
             );
+
+            const categoryLine = r.category?.trim()
+              ? h(Text, { dimColor: true }, `分類: ${r.category.trim()}`)
+              : null;
+
+            const meaningsSection =
+              r.meanings.length > 0
+                ? h(
+                    Box,
+                    { flexDirection: "column", marginTop: 1 },
+                    r.meanings.map((m) => {
+                      const part = m.part_of_speech
+                        ? `${m.part_of_speech} `
+                        : "";
+                      const explanation = m.explanation
+                        .replace(/^:/, "")
+                        .trim();
+
+                      const examples = m.examples ?? [];
+                      const examplesSection =
+                        examples.length > 0
+                          ? h(
+                              Box,
+                              {
+                                flexDirection: "column",
+                                marginTop: 1,
+                                marginLeft: 2,
+                              },
+                              h(Text, { dimColor: true }, "用例:"),
+                              ...examples.flatMap((ex, exIdx) => {
+                                const lines = [
+                                  h(Text, null, `  ${ex.hanzi}`),
+                                  h(
+                                    Text,
+                                    { dimColor: true },
+                                    `  ${ex.romanization}`,
+                                  ),
+                                ];
+                                if (exIdx < examples.length - 1) {
+                                  lines.push(h(Text, null, " "));
+                                }
+                                return lines;
+                              }),
+                            )
+                          : null;
+
+                      return h(
+                        Box,
+                        {
+                          key: m.id,
+                          flexDirection: "column",
+                          marginBottom: 1,
+                        },
+                        h(
+                          Text,
+                          null,
+                          h(Text, { bold: true }, `${m.display_id}.`),
+                          " ",
+                          part,
+                          explanation,
+                        ),
+                        examplesSection,
+                      );
+                    }),
+                  )
+                : h(Text, { dimColor: true }, "(無釋義)");
+
+            const separator =
+              idx < results.length - 1
+                ? h(Text, { dimColor: true }, "─".repeat(40))
+                : null;
 
             return h(
               Box,
               { key: r.id, flexDirection: "column", marginBottom: 1 },
               titleLine,
-              subtitle ? h(Text, { dimColor: true }, subtitle) : null,
+              categoryLine,
+              meaningsSection,
+              separator,
             );
           }),
     );
@@ -488,6 +577,11 @@ const main = async () => {
     .option("-m, --mode <mode>", "Search mode (default: qs / multi_search)")
     .option("-t, --term <term>", "Search term (optional)")
     .option("-d, --db <path>", `Database path (default: ${DEFAULT_DB_PATH})`)
+    .option(
+      "--base-url <url>",
+      `App base URL for generated links (default: ${DEFAULT_APP_BASE_URL}; env: HOKKIEN_SUTIAN_BASE_URL)`,
+    )
+    .option("--local", `Use local app base URL (${LOCAL_APP_BASE_URL})`)
     .option("--download", "Allow downloading database if not found", {
       default: true,
     })
@@ -520,6 +614,14 @@ const main = async () => {
   const options = parsed.options as Record<string, unknown>;
   const args = parsed.args as string[];
 
+  if (options.help === true) {
+    // With run:false, cac won't auto-exit after printing help.
+    // Ensure we *only* show help when --help is specified.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    (cli as any).outputHelp?.();
+    return;
+  }
+
   const dbPath = (options.db as string | undefined) || DEFAULT_DB_PATH;
   const allowDownload = options.download !== false;
   const forceRedownload = options.redownload === true;
@@ -527,6 +629,8 @@ const main = async () => {
   const isInk = options.ink === true;
   const isAlfred = options.alfred === true;
   const isRandom = options.random === true;
+
+  const appBaseUrl = resolveAppBaseUrl(options);
 
   if (isInk && isAlfred) {
     throw new Error("--ink and --alfred cannot be used together");
@@ -569,11 +673,12 @@ const main = async () => {
       await renderInkResults({
         mode: "random",
         results: result ? [result] : [],
+        appBaseUrl,
       });
       return;
     }
     if (isAlfred) {
-      const output = resultsToAlfredOutput(result ? [result] : []);
+      const output = resultsToAlfredOutput(result ? [result] : [], appBaseUrl);
       console.log(JSON.stringify(output));
       return;
     }
@@ -602,12 +707,13 @@ const main = async () => {
         mode,
         results,
         toneGroups,
+        appBaseUrl,
       });
       return;
     }
 
     if (isAlfred) {
-      const output = resultsToAlfredOutput(results);
+      const output = resultsToAlfredOutput(results, appBaseUrl);
       console.log(JSON.stringify(output));
       return;
     }
@@ -627,11 +733,11 @@ const main = async () => {
     const results = result ? [result] : [];
 
     if (isInk) {
-      await renderInkResults({ mode, term: termValue, results });
+      await renderInkResults({ mode, term: termValue, results, appBaseUrl });
       return;
     }
     if (isAlfred) {
-      const output = resultsToAlfredOutput(results);
+      const output = resultsToAlfredOutput(results, appBaseUrl);
       console.log(JSON.stringify(output));
       return;
     }
@@ -653,12 +759,12 @@ const main = async () => {
   const results = performSearch(adapter, termValue, mode);
 
   if (isInk) {
-    await renderInkResults({ mode, term: termValue, results });
+    await renderInkResults({ mode, term: termValue, results, appBaseUrl });
     return;
   }
 
   if (isAlfred) {
-    const output = resultsToAlfredOutput(results);
+    const output = resultsToAlfredOutput(results, appBaseUrl);
     console.log(JSON.stringify(output));
     return;
   }
