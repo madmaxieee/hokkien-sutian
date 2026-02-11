@@ -302,8 +302,35 @@ const HokkienDictionary = () => {
               const substring = sentence.substring(i, i + len);
               if (foundResults.has(substring)) continue;
 
+              /* cSpell:disable */
+              // includes entries with annotation tags like 【替】
+              // example: 袂【替】
+
+              // bē/buē
+
+              // 1.
+              // 副詞 不。否定詞。
+
+              // 用例:
+              // 袂曉
+
+              // bē-hiáu
+
+              // (不會)
+
+              // 袂講得
+
+              // bē-kóng--tit
+
+              // (說不得)
+
+              // 異用字:
+              // 𣍐
+              // 分類:
+              // 副詞
+              /* cSpell:enable */
               const stmt = db.prepare(
-                `SELECT id, hanzi FROM entries WHERE hanzi = $term`,
+                `SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'`,
               );
               const matchedEntries: Result[] = [];
               stmt.bind({ $term: substring });
