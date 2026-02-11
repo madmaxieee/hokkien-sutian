@@ -38,6 +38,8 @@ import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
 import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
 
+import modeHelpData from "../../mode-help.json";
+
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 
 type ModeHelpExampleLink = {
@@ -559,102 +561,7 @@ const HokkienDictionary = () => {
   );
 
   const modeHelp = useMemo(
-    () =>
-      ({
-        hokkien_entry: {
-          title: "用閩南語查詞目",
-          description:
-            "在『詞目』中用漢字或台羅（羅馬字）搜尋。支援包含式比對（類似 %關鍵字%），輸入片段也能找到。",
-          how: [
-            "會同時比對：詞目的漢字（含【白】【文】等標記）與台羅拼寫。",
-            "如果想找特定標記，也可以直接輸入【白】或【文】之類的字樣。",
-          ],
-          examples: [
-            "?q=袂",
-            "?q=嚨喉",
-            "?q=尻川",
-            "?q=按怎",
-            "?q=食",
-            "?q=tsia̍h",
-            "?q=【白】",
-          ],
-        },
-        mandarin_example: {
-          title: "用北平方言查用例",
-          description:
-            "用北平方言（例句翻譯）來找用例；找到符合的例句後，再回推對應的詞目。",
-          how: [
-            "搜尋範圍只在『用例的北平方言翻譯』欄位。",
-            "同一個詞目如果有多個符合的用例，只會顯示一次詞目（結果去重）。",
-          ],
-          examples: ["?me=運動", "?me=生氣", "?me=一起"],
-        },
-        hokkien_example: {
-          title: "用閩南語查用例",
-          description:
-            "在『用例』中用漢字或台羅搜尋，適合想從例句找回詞目的時候。",
-          how: [
-            "搜尋範圍在：用例漢字、用例台羅。",
-            "同一個詞目如果有多個符合的用例，只會顯示一次詞目（結果去重）。",
-          ],
-          examples: ["?hf=食", "?hf=tsia̍h", "?hf=beh"],
-        },
-        mandarin_fulltext: {
-          title: "用北平方言查全文",
-          description:
-            "用北平方言做全面搜尋：會查詞目漢字、釋義（北平方言解釋）、以及用例的北平方言翻譯。",
-          how: [
-            "適合只記得北平方言意思、想找出對應閩南語詞目的情境。",
-            "結果會合併去重（同一詞目被多個欄位命中也只會出現一次）。",
-          ],
-          examples: ["?mf=感謝", "?mf=稱讚", "?mf=害怕"],
-        },
-        hokkien_fulltext: {
-          title: "全文(閩南語)",
-          description: "用閩南語做全文搜尋：會同時查詞目與用例的漢字/台羅。",
-          how: [
-            "比『用閩南語查詞目』更廣：例句裡出現的詞也會被命中。",
-            "結果會合併去重。",
-          ],
-          examples: ["?hft=龍溪", "?hft=食", "?hft=tsia̍h", "?hft=lí"],
-        },
-        regex: {
-          title: "正規表示式(詞目)",
-          description:
-            "用正規表示式（Regex）搜尋『詞目漢字』欄位。適合做模式比對或精準篩選。",
-          how: [
-            "只會對『詞目漢字』做比對（不含台羅、釋義、用例）。",
-            "語法採 JavaScript RegExp；若語法錯誤會提示查詢失敗。",
-            "常用：^ 開頭、$ 結尾、.* 任意字串、[...] 字元集合。",
-          ],
-          examples: ["?rx=^【白】", "?rx=食.*", "?rx=^.*飯$"],
-        },
-        multi_search: {
-          title: "逐詞查詢",
-          description:
-            "把輸入的句子拆成多個片段，從『最長』開始嘗試做『完全相等』的詞目比對，找出句中包含的詞。",
-          how: [
-            "比對方式是『詞目漢字完全相等』，不是包含式比對。",
-            "建議輸入一整句漢字（少標點/少空白）來找出可能的詞目切分。",
-          ],
-          examples: [
-            "?qs=龍溪",
-            "?qs=銅山",
-            {
-              query: "?qs=嚨喉出力講袂出聲",
-              note: "源：傷心地獄芳花引魂",
-              links: [
-                {
-                  url: "https://www.youtube.com/watch?v=5vyT2qDmFhE",
-                },
-              ],
-            },
-            "?qs=我欲來去食肉骨茶",
-            "?qs=伊會曉講",
-            "?qs=你欲去佗位",
-          ],
-        },
-      }) satisfies ModeHelpMap,
+    () => modeHelpData.modes as unknown as ModeHelpMap,
     [],
   );
 
