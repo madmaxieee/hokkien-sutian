@@ -38,7 +38,8 @@ import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
 import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
 
-import modeHelpData from "../../mode-help.json";
+import { parse as parseJsonc } from "jsonc-parser";
+import modeHelpText from "../../data/mode-help.jsonc?raw";
 
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 
@@ -63,6 +64,11 @@ type ModeHelpContent = {
 };
 
 type ModeHelpMap = Record<string, ModeHelpContent>;
+
+type ModeHelpFile = {
+  modeOrder?: string[];
+  modes: Record<string, ModeHelpContent>;
+};
 
 const HokkienDictionary = () => {
   const [db, setDb] = useState<DBAdapter | null>(null);
@@ -560,10 +566,16 @@ const HokkienDictionary = () => {
     [],
   );
 
-  const modeHelp = useMemo(
-    () => modeHelpData.modes as unknown as ModeHelpMap,
-    [],
-  );
+  const modeHelp = useMemo(() => {
+    try {
+      const parsed = parseJsonc(modeHelpText) as unknown as ModeHelpFile;
+      if (!parsed || typeof parsed !== "object") return {};
+      if (!parsed.modes || typeof parsed.modes !== "object") return {};
+      return parsed.modes as unknown as ModeHelpMap;
+    } catch {
+      return {};
+    }
+  }, []);
 
   const activeModeHelpContent =
     activeModeHelp && activeModeHelp in modeHelp

@@ -6,6 +6,8 @@ import { parseArgs } from "node:util";
 
 import { Database } from "bun:sqlite";
 
+import { parse as parseJsonc } from "jsonc-parser";
+
 import { BunSqliteAdapter } from "../src/hokkien/db/bun-adapter";
 import {
   fetchEntryDetails,
@@ -38,9 +40,9 @@ type ModeHelpFile = {
 
 const loadModeHelpFile = (): ModeHelpFile | null => {
   try {
-    const fileUrl = new URL("../mode-help.json", import.meta.url);
+    const fileUrl = new URL("../data/mode-help.jsonc", import.meta.url);
     const text = readFileSync(fileUrl, "utf8");
-    return JSON.parse(text) as ModeHelpFile;
+    return parseJsonc(text) as ModeHelpFile;
   } catch {
     return null;
   }
