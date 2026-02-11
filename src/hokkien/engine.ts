@@ -62,10 +62,29 @@ export const sortResults = (results: Result[], term: string): Result[] => {
 };
 
 export const registerRegexp = (db: DBAdapter) => {
-  db.createFunction?.("REGEXP", (pattern, value) => {
-    if (typeof pattern !== "string" || typeof value !== "string") return 0;
-    return new RegExp(pattern).test(value) ? 1 : 0;
+  if (!db.createFunction) return false;
+  try {
+    db.createFunction("REGEXP", (pattern, value) => {
+      if (typeof pattern !== "string" || typeof value !== "string") return 0;
+      return new RegExp(pattern).test(value) ? 1 : 0;
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const regexSearchFallback = (db: DBAdapter, pattern: string): Set<number> => {
+  const re = new RegExp(pattern);
+  const entryIds = new Set<number>();
+  const result = execSingle(db, "SELECT id, hanzi FROM entries");
+  result.values.forEach((row) => {
+    const id = row[0] as number;
+    const hanzi = row[1] as string;
+    if (typeof hanzi !== "string") return;
+    if (re.test(hanzi)) entryIds.add(id);
   });
+  return entryIds;
 };
 
 export const fetchEntryDetails = (
@@ -250,11 +269,29 @@ export const performSearch = (
   const query = queries[mode];
   if (!query) return [];
 
-  const params = { $term: mode === "regex" ? trimmedTerm : likeTerm };
   const entryIds = new Set<number>();
-  execSingle(db, query, params).values.forEach((row) => {
-    entryIds.add(row[0] as number);
-  });
+  if (mode === "regex") {
+    const params = { $term: trimmedTerm };
+    try {
+      execSingle(db, query, params).values.forEach((row) => {
+        entryIds.add(row[0] as number);
+      });
+    } catch {
+      // For runtimes that can't register SQL functions (e.g., bun:sqlite 1.3.x),
+      // fall back to JS filtering.
+      return sortResults(
+        Array.from(regexSearchFallback(db, trimmedTerm))
+          .map((id) => fetchEntryDetails(db, id))
+          .filter(Boolean) as Result[],
+        trimmedTerm,
+      );
+    }
+  } else {
+    const params = { $term: likeTerm };
+    execSingle(db, query, params).values.forEach((row) => {
+      entryIds.add(row[0] as number);
+    });
+  }
 
   const detailedResults = Array.from(entryIds)
     .map((id) => fetchEntryDetails(db, id))

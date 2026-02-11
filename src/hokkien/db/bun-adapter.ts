@@ -27,28 +27,4 @@ export class BunSqliteAdapter implements DBAdapter {
 
     return { columns, values };
   }
-
-  createFunction(name: string, fn: (...args: SqlValue[]) => SqlValue): void {
-    const dbAny = this.db as unknown as {
-      function?: (name: string, fn: (...args: unknown[]) => unknown) => void;
-      createFunction?: (
-        name: string,
-        fn: (...args: unknown[]) => unknown,
-      ) => void;
-    };
-
-    const wrapped = fn as (...args: unknown[]) => unknown;
-    if (typeof dbAny.function === "function") {
-      dbAny.function(name, wrapped);
-      return;
-    }
-    if (typeof dbAny.createFunction === "function") {
-      dbAny.createFunction(name, wrapped);
-      return;
-    }
-
-    throw new Error(
-      "bun:sqlite custom functions not supported by this runtime",
-    );
-  }
 }

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { parseArgs } from "node:util";
 
 import { Database } from "bun:sqlite";
 
@@ -17,62 +18,6 @@ import type { PhoneticQuery } from "../src/hokkien/types";
 
 const DEFAULT_DB_PATH = "public/assets/data/kautian.db";
 const DEFAULT_SOURCE_URL = "https://sutian.teddysc.me/assets/data/kautian.db";
-
-const parseArgs = (argv: string[]) => {
-  const options: Record<string, string | boolean> = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--help" || arg === "-h") {
-      options.help = true;
-      continue;
-    }
-    if (arg === "--pretty") {
-      options.pretty = true;
-      continue;
-    }
-    if (arg === "--download") {
-      options.download = true;
-      continue;
-    }
-    if (arg === "--no-download") {
-      options.download = false;
-      continue;
-    }
-    if (arg === "--random") {
-      options.random = true;
-      continue;
-    }
-
-    if (arg.startsWith("--")) {
-      const [key, value] = arg.slice(2).split("=");
-      if (value !== undefined) {
-        options[key] = value;
-      } else {
-        options[key] = argv[i + 1];
-        i += 1;
-      }
-      continue;
-    }
-
-    if (arg === "-m") {
-      options.mode = argv[i + 1];
-      i += 1;
-      continue;
-    }
-    if (arg === "-t") {
-      options.term = argv[i + 1];
-      i += 1;
-      continue;
-    }
-    if (arg === "-d") {
-      options.db = argv[i + 1];
-      i += 1;
-      continue;
-    }
-  }
-
-  return options;
-};
 
 const printUsage = () => {
   console.log(`Usage:
@@ -127,33 +72,54 @@ const isSearchMode = (value: string): value is SearchMode =>
   ].includes(value);
 
 const main = async () => {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
+  const { values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: "boolean", short: "h" },
+      mode: { type: "string", short: "m", default: "hokkien_entry" },
+      term: { type: "string", short: "t" },
+      db: { type: "string", short: "d" },
+      pretty: { type: "boolean" },
+      random: { type: "boolean" },
+      download: { type: "boolean", default: true },
+      si: { type: "string" },
+      sf: { type: "string" },
+      st: { type: "string" },
+      sm: { type: "string" },
+    },
+    strict: true,
+    allowPositionals: true,
+  });
+
+  if (values.help) {
     printUsage();
     return;
   }
 
-  const dbPath = (options.db as string) || DEFAULT_DB_PATH;
-  const allowDownload = options.download !== false;
+  const dbPath = values.db || DEFAULT_DB_PATH;
+  const allowDownload = values.download !== false;
   const resolvedDbPath = await ensureDbPath(dbPath, allowDownload);
 
   const db = new Database(resolvedDbPath, { readonly: true });
   const adapter = new BunSqliteAdapter(db);
-  registerRegexp(adapter);
 
-  if (options.random) {
+  const mode = values.mode || "hokkien_entry";
+  if (mode === "regex") {
+    registerRegexp(adapter);
+  }
+
+  if (values.random) {
     const result = fetchRandomEntry(adapter);
     console.log(JSON.stringify({ mode: "random", result }, mapReplacer, 2));
     return;
   }
 
-  const mode = (options.mode as string) || "hokkien_entry";
   if (mode === "phonetic") {
     const query: PhoneticQuery = {
-      initial: (options.si as string) || null,
-      final: (options.sf as string) || null,
-      tone: options.st ? parseInt(options.st as string, 10) : null,
-      singleSyllableOnly: options.sm !== "0",
+      initial: values.si || null,
+      final: values.sf || null,
+      tone: values.st ? parseInt(values.st, 10) : null,
+      singleSyllableOnly: values.sm !== "0",
     };
 
     const { results, toneGroups } = performPhoneticSearch(adapter, query);
@@ -163,12 +129,12 @@ const main = async () => {
       results,
       toneGroups,
     };
-    const pretty = options.pretty ? 2 : 0;
+    const pretty = values.pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, pretty));
     return;
   }
 
-  const term = options.term as string | undefined;
+  const term = values.term;
   if (!term) {
     printUsage();
     process.exitCode = 1;
@@ -178,7 +144,7 @@ const main = async () => {
   if (mode === "single_entry") {
     const result = fetchEntryDetails(adapter, parseInt(term, 10));
     const payload = { mode, term, results: result ? [result] : [] };
-    const pretty = options.pretty ? 2 : 0;
+    const pretty = values.pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, pretty));
     return;
   }
@@ -189,7 +155,7 @@ const main = async () => {
 
   const results = performSearch(adapter, term, mode);
   const payload = { mode, term, results };
-  const pretty = options.pretty ? 2 : 0;
+  const pretty = values.pretty ? 2 : 0;
   console.log(JSON.stringify(payload, mapReplacer, pretty));
 };
 
