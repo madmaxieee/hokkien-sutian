@@ -31,7 +31,7 @@ export interface MeaningSynonym {
 }
 
 export interface PhoneticDifference {
-  [key: string]: number | string;
+  [key: string]: number | string | Uint8Array | null;
 }
 
 export interface Result {

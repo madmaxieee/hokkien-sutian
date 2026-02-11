@@ -1,15 +1,10 @@
 import React, { useEffect, useState } from "react";
-import type { Database } from "sql.js";
 import { X } from "lucide-react";
 
+import type { DBAdapter } from "../db/types";
+import { buildPhoneticIndex } from "../engine";
 import type { PhoneticQuery } from "../types";
-import {
-  FINALS,
-  INITIALS,
-  TONES,
-  TONE_LABELS,
-  parseSyllable,
-} from "../phonetics";
+import { FINALS, INITIALS, TONES, TONE_LABELS } from "../phonetics";
 
 export const PhoneticPickerModal = ({
   isOpen,
@@ -20,7 +15,7 @@ export const PhoneticPickerModal = ({
   isOpen: boolean;
   onClose: () => void;
   onSearch: (query: PhoneticQuery, resultCount: number) => void;
-  db: Database | null;
+  db: DBAdapter | null;
 }) => {
   const [selectedInitial, setSelectedInitial] = useState<string | null>(null);
   const [selectedFinal, setSelectedFinal] = useState<string | null>(null);
@@ -45,57 +40,16 @@ export const PhoneticPickerModal = ({
   useEffect(() => {
     if (!db || !isOpen) return;
 
-    const singleIndex = new Map<string, Set<number>>();
-    const multiIndex = new Map<string, Set<number>>();
-    const allInitials = new Set<string>();
-    const allFinals = new Set<string>();
-    const allTones = new Set<number>();
-
     try {
-      const result = db.exec("SELECT id, romanization FROM entries");
-      if (result.length > 0) {
-        for (const row of result[0].values) {
-          const id = row[0] as number;
-          const romanization = row[1] as string;
-          if (!romanization) continue;
-
-          // Handle alternative pronunciations separated by "/"
-          const pronunciationVariants = romanization.split("/");
-
-          for (const variant of pronunciationVariants) {
-            const syllables = variant.split(/[-\s]+/).filter((s) => s.trim());
-            const isSingleSyllable = syllables.length === 1;
-
-            for (const syl of syllables) {
-              const { initial, final, tone } = parseSyllable(syl);
-              if (!final) continue; // Skip if no valid final
-
-              const key = `${initial || "ling"}|${final}|${tone}`;
-
-              if (isSingleSyllable) {
-                if (!singleIndex.has(key)) singleIndex.set(key, new Set());
-                singleIndex.get(key)!.add(id);
-              } else {
-                if (!multiIndex.has(key)) multiIndex.set(key, new Set());
-                multiIndex.get(key)!.add(id);
-              }
-
-              allInitials.add(initial || "ling");
-              allFinals.add(final);
-              allTones.add(tone);
-            }
-          }
-        }
-      }
+      const index = buildPhoneticIndex(db);
+      setSyllableIndex(index.singleIndex);
+      setMultiSyllableIndex(index.multiIndex);
+      setAvailableInitials(index.availableInitials);
+      setAvailableFinals(index.availableFinals);
+      setAvailableTones(index.availableTones);
     } catch (err) {
       console.error("Error building syllable index:", err);
     }
-
-    setSyllableIndex(singleIndex);
-    setMultiSyllableIndex(multiIndex);
-    setAvailableInitials(allInitials);
-    setAvailableFinals(allFinals);
-    setAvailableTones(allTones);
   }, [db, isOpen]);
 
   // Update match count and available options when selection changes
@@ -254,7 +208,9 @@ export const PhoneticPickerModal = ({
             <h3 className="text-sm font-semibold text-muted-foreground mb-2">
               韻母 (Final)
               {selectedFinal && (
-                <span className="ml-2 text-blue-600 dark:text-blue-400">: {selectedFinal}</span>
+                <span className="ml-2 text-blue-600 dark:text-blue-400">
+                  : {selectedFinal}
+                </span>
               )}
             </h3>
             <div className="flex flex-wrap gap-1">
