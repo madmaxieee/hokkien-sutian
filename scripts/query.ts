@@ -55,6 +55,70 @@ const resolveAppBaseUrl = (options: Record<string, unknown>): string => {
 const makeTerminalLink = (url: string, label: string) =>
   `\u001b]8;;${url}\u0007${label}\u001b]8;;\u0007`;
 
+const getAppCategoryUrl = (baseUrl: string, category: string) => {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  return `${trimmed}/?cat=${encodeURIComponent(category)}`;
+};
+
+const getAppQueryUrl = (
+  baseUrl: string,
+  payload: {
+    mode: string;
+    term?: string | null;
+  },
+) => {
+  const term = payload.term ?? "";
+  if (!term) return null;
+
+  const modeToParam: Record<string, string> = {
+    hokkien_entry: "q",
+    mandarin_example: "me",
+    hokkien_example: "hf",
+    mandarin_fulltext: "mf",
+    hokkien_fulltext: "hft",
+    regex: "rx",
+    category: "cat",
+    multi_search: "qs",
+    single_entry: "su",
+  };
+
+  const key = modeToParam[payload.mode];
+  if (!key) return null;
+
+  const trimmed = baseUrl.replace(/\/$/, "");
+  return `${trimmed}/?${key}=${encodeURIComponent(term)}`;
+};
+
+const linkOrText = (url: string | null, label: string) =>
+  url ? makeTerminalLink(url, label) : label;
+
+const formatInkCategories = (baseUrl: string, category: string) => {
+  const parts = category
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts
+    .map((c) => makeTerminalLink(getAppCategoryUrl(baseUrl, c), c))
+    .join(", ");
+};
+
+const formatInkIthuanValue = (value: string, seen: Set<string>) => {
+  const tokens = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return value;
+
+  return tokens
+    .map((token) => {
+      if (seen.has(token)) return token;
+      seen.add(token);
+      return linkOrText(getSuiSiannUrl(token), token);
+    })
+    .join(", ");
+};
+
 type ModeHelpExampleLink = { url: string; label?: string };
 type ModeHelpExample =
   | string
@@ -413,6 +477,7 @@ const renderInkResults = async (payload: {
   results?: Result[];
   toneGroups?: ToneGroup[];
   appBaseUrl: string;
+  showPhoneticDifferences: boolean;
 }) => {
   const { render, Box, Text } = await import("ink");
   const h = React.createElement;
@@ -422,11 +487,12 @@ const renderInkResults = async (payload: {
     const toneGroups = payload.toneGroups ?? [];
     const headerTerm = payload.term ? `: ${payload.term}` : "";
 
-    const header = h(
-      Text,
-      { bold: true },
-      `Mode: ${payload.mode}${headerTerm}`,
-    );
+    const headerText = `Mode: ${payload.mode}${headerTerm}`;
+    const headerUrl = getAppQueryUrl(payload.appBaseUrl, {
+      mode: payload.mode,
+      term: payload.term,
+    });
+    const header = h(Text, { bold: true }, linkOrText(headerUrl, headerText));
 
     const toneGroupSection =
       toneGroups.length > 0
@@ -460,12 +526,18 @@ const renderInkResults = async (payload: {
             const appUrl = getAppEntryUrl(payload.appBaseUrl, r.id);
             const idLink = makeTerminalLink(appUrl, `#${r.id}`);
 
+            const hanziIthuan = linkOrText(getSuiSiannUrl(r.hanzi), r.hanzi);
+            const romanIthuan = linkOrText(
+              getSuiSiannUrl(r.romanization),
+              r.romanization,
+            );
+
             const titleLine = h(
               Text,
               null,
-              h(Text, { bold: true }, r.hanzi),
+              h(Text, { bold: true }, hanziIthuan),
               " ",
-              h(Text, { dimColor: true }, r.romanization),
+              h(Text, { dimColor: true }, romanIthuan),
               " ",
               h(Text, { dimColor: true }, "("),
               h(Text, { dimColor: true }, idLink),
@@ -473,7 +545,11 @@ const renderInkResults = async (payload: {
             );
 
             const categoryLine = r.category?.trim()
-              ? h(Text, { dimColor: true }, `分類: ${r.category.trim()}`)
+              ? h(
+                  Text,
+                  { dimColor: true },
+                  `分類: ${formatInkCategories(payload.appBaseUrl, r.category.trim())}`,
+                )
               : null;
 
             const meaningsSection =
@@ -501,13 +577,17 @@ const renderInkResults = async (payload: {
                               },
                               h(Text, { dimColor: true }, "用例:"),
                               ...examples.flatMap((ex, exIdx) => {
+                                const hanziLink = linkOrText(
+                                  getSuiSiannUrl(ex.hanzi),
+                                  ex.hanzi,
+                                );
+                                const romanLink = linkOrText(
+                                  getSuiSiannUrl(ex.romanization),
+                                  ex.romanization,
+                                );
                                 const lines = [
-                                  h(Text, null, `  ${ex.hanzi}`),
-                                  h(
-                                    Text,
-                                    { dimColor: true },
-                                    `  ${ex.romanization}`,
-                                  ),
+                                  h(Text, null, `  ${hanziLink}`),
+                                  h(Text, { dimColor: true }, `  ${romanLink}`),
                                 ];
                                 if (exIdx < examples.length - 1) {
                                   lines.push(h(Text, null, " "));
@@ -538,6 +618,67 @@ const renderInkResults = async (payload: {
                   )
                 : h(Text, { dimColor: true }, "(無釋義)");
 
+            const phoneticDifferencesSection =
+              payload.showPhoneticDifferences && r.phonetic_differences
+                ? (() => {
+                    const order: Record<string, number> = {
+                      yi_lan_zhang: 1,
+                      tai_zhong_zhang: 2,
+                      tai_nan_mix: 3,
+                      gao_xiong_mix: 4,
+                      san_xia_quan: 5,
+                      taipei_quan: 6,
+                      jin_men_quan: 7,
+                      ma_gong_quan: 8,
+                      xin_zhu_quan: 9,
+                      lu_gang_quan: 10,
+                    };
+
+                    const labels: Record<string, string> = {
+                      yi_lan_zhang: "宜蘭偏漳腔",
+                      tai_zhong_zhang: "臺中偏漳腔",
+                      tai_nan_mix: "臺南混合腔",
+                      gao_xiong_mix: "高雄混合腔",
+                      san_xia_quan: "三峽偏泉腔",
+                      taipei_quan: "臺北偏泉腔",
+                      jin_men_quan: "金門偏泉腔",
+                      ma_gong_quan: "馬公偏泉腔",
+                      xin_zhu_quan: "新竹偏泉腔",
+                      lu_gang_quan: "鹿港偏泉腔",
+                    };
+
+                    const entries = Object.entries(r.phonetic_differences)
+                      .filter(([key, value]) => order[key] && value)
+                      .sort(([a], [b]) => order[a] - order[b])
+                      .map(([key, value]) => ({
+                        label: labels[key],
+                        value: String(value),
+                      }));
+
+                    if (entries.length === 0) return null;
+
+                    const seenSounds = new Set<string>();
+
+                    return h(
+                      Box,
+                      { flexDirection: "column", marginTop: 1 },
+                      h(Text, { bold: true }, "語音差異"),
+                      h(Text, { dimColor: true }, "腔  語音差異"),
+                      ...entries.map((item) => {
+                        const rendered = formatInkIthuanValue(
+                          item.value,
+                          seenSounds,
+                        );
+                        return h(
+                          Text,
+                          { key: item.label },
+                          `${item.label}  ${rendered}`,
+                        );
+                      }),
+                    );
+                  })()
+                : null;
+
             const separator =
               idx < results.length - 1
                 ? h(Text, { dimColor: true }, "─".repeat(40))
@@ -549,6 +690,7 @@ const renderInkResults = async (payload: {
               titleLine,
               categoryLine,
               meaningsSection,
+              phoneticDifferencesSection,
               separator,
             );
           }),
@@ -590,6 +732,9 @@ const main = async () => {
     .option("--random", "Fetch a random entry")
     .option("-p, --pretty", "Pretty-print JSON output with indentation")
     .option("-i, --ink", "Render results with ink (non-interactive)")
+    .option("--phonetic-differences", "Show 語音差異 in ink output", {
+      default: true,
+    })
     .option("--alfred", "Output Alfred Script Filter JSON")
     .option("--si <initial>", "Initial consonant (聲母) (phonetic mode)")
     .option("--sf <final>", "Final/rhyme (韻母) (phonetic mode)")
@@ -629,6 +774,7 @@ const main = async () => {
   const isInk = options.ink === true;
   const isAlfred = options.alfred === true;
   const isRandom = options.random === true;
+  const showPhoneticDifferences = options.phoneticDifferences !== false;
 
   const appBaseUrl = resolveAppBaseUrl(options);
 
@@ -674,6 +820,7 @@ const main = async () => {
         mode: "random",
         results: result ? [result] : [],
         appBaseUrl,
+        showPhoneticDifferences,
       });
       return;
     }
@@ -708,6 +855,7 @@ const main = async () => {
         results,
         toneGroups,
         appBaseUrl,
+        showPhoneticDifferences,
       });
       return;
     }
@@ -733,7 +881,13 @@ const main = async () => {
     const results = result ? [result] : [];
 
     if (isInk) {
-      await renderInkResults({ mode, term: termValue, results, appBaseUrl });
+      await renderInkResults({
+        mode,
+        term: termValue,
+        results,
+        appBaseUrl,
+        showPhoneticDifferences,
+      });
       return;
     }
     if (isAlfred) {
@@ -759,7 +913,13 @@ const main = async () => {
   const results = performSearch(adapter, termValue, mode);
 
   if (isInk) {
-    await renderInkResults({ mode, term: termValue, results, appBaseUrl });
+    await renderInkResults({
+      mode,
+      term: termValue,
+      results,
+      appBaseUrl,
+      showPhoneticDifferences,
+    });
     return;
   }
 
