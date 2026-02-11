@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -17,36 +17,62 @@ import {
 import type { SearchMode } from "../src/hokkien/engine";
 import type { PhoneticQuery } from "../src/hokkien/types";
 
-const DEFAULT_DB_PATH = "public/assets/data/kautian.db";
+const DEFAULT_CACHE_DIR = `${process.env.HOME}/.cache/hokkien-sutian`;
+const DEFAULT_DB_PATH = `${DEFAULT_CACHE_DIR}/kautian.db`;
 const DEFAULT_SOURCE_URL = "https://sutian.teddysc.me/assets/data/kautian.db";
 
 const printUsage = () => {
-  console.log(`Usage:
-  bun run scripts/query.ts -m <mode> -t <term> [--db <path>] [--download]
+  console.log(`hokkien-sutian-query - Query the 臺灣閩南語常用詞典 database
+
+Usage:
+  hokkien-sutian-query -m <mode> -t <term> [options]
+  hokkien-sutian-query --random
+  hokkien-sutian-query --redownload
+
+Database:
+  Default database path: ~/.cache/hokkien-sutian/kautian.db
+  The database is automatically downloaded on first run if not present.
 
 Modes:
-  hokkien_entry | mandarin_example | hokkien_example | mandarin_fulltext
-  regex | hokkien_fulltext | category | multi_search | single_entry | phonetic
+  hokkien_entry      Search Hokkien entries
+  mandarin_example   Search Mandarin example sentences
+  hokkien_example    Search Hokkien example sentences
+  mandarin_fulltext  Full-text search in Mandarin
+  hokkien_fulltext   Full-text search in Hokkien
+  regex              Search using regular expressions
+  category           Search by category
+  multi_search       Multi-field search
+  single_entry       Get single entry by ID
+  phonetic           Search by phonetic components
 
-Phonetic options:
-  --si <initial> --sf <final> --st <tone> --sm 0
+Options:
+  -m, --mode <mode>      Search mode (default: hokkien_entry)
+  -t, --term <term>      Search term (required for most modes)
+  -d, --db <path>        Database path (default: ~/.cache/hokkien-sutian/kautian.db)
+  --download             Allow downloading database if not found (default: true)
+  --no-download          Don't download database, fail if not found
+  --redownload           Force re-download the database even if it exists
+  --pretty               Pretty-print JSON output with indentation
+  --random               Fetch a random entry
+  -h, --help             Show this help message
+
+Phonetic search options (for mode: phonetic):
+  --si <initial>         Initial consonant (聲母)
+  --sf <final>           Final/rhyme (韻母)
+  --st <tone>            Tone number (調號)
+  --sm <0|1>             Single syllable only (default: 1), use 0 to disable
 
 Examples:
-  bun run scripts/query.ts -m hokkien_entry -t "li-ho"
-  bun run scripts/query.ts -m phonetic --si k --sf a --st 1
-  bun run scripts/query.ts -m multi_search -t "an-tsuann"
-  bun run scripts/query.ts --random
+  hokkien-sutian-query -m hokkien_entry -t "an-tsuann"
+  hokkien-sutian-query -m hokkien_entry -t "li-ho" --pretty
+  hokkien-sutian-query -m phonetic --si k --sf a --st 1
+  hokkien-sutian-query -m single_entry -t 12345
+  hokkien-sutian-query --random --pretty
+  hokkien-sutian-query --redownload
 `);
 };
 
-const ensureDbPath = async (dbPath: string, allowDownload: boolean) => {
-  if (existsSync(dbPath)) return dbPath;
-  if (!allowDownload) {
-    throw new Error(
-      `Database not found at ${dbPath}. Use --download to fetch.`,
-    );
-  }
-
+const downloadDatabase = async (dbPath: string): Promise<void> => {
   await mkdir(dirname(dbPath), { recursive: true });
   const response = await fetch(DEFAULT_SOURCE_URL);
   if (!response.ok) {
@@ -54,8 +80,31 @@ const ensureDbPath = async (dbPath: string, allowDownload: boolean) => {
       `Download failed: ${response.status} ${response.statusText}`,
     );
   }
-
   await Bun.write(dbPath, await response.arrayBuffer());
+};
+
+const ensureDbPath = async (
+  dbPath: string,
+  allowDownload: boolean,
+  forceRedownload: boolean,
+): Promise<string> => {
+  if (forceRedownload) {
+    if (existsSync(dbPath)) {
+      await rm(dbPath);
+    }
+    await downloadDatabase(dbPath);
+    return dbPath;
+  }
+
+  if (existsSync(dbPath)) return dbPath;
+
+  if (!allowDownload) {
+    throw new Error(
+      `Database not found at ${dbPath}. Use --download to fetch.`,
+    );
+  }
+
+  await downloadDatabase(dbPath);
   return dbPath;
 };
 
@@ -83,6 +132,7 @@ const main = async () => {
       pretty: { type: "boolean" },
       random: { type: "boolean" },
       download: { type: "boolean", default: true },
+      redownload: { type: "boolean" },
       si: { type: "string" },
       sf: { type: "string" },
       st: { type: "string" },
@@ -99,7 +149,17 @@ const main = async () => {
 
   const dbPath = values.db || DEFAULT_DB_PATH;
   const allowDownload = values.download !== false;
-  const resolvedDbPath = await ensureDbPath(dbPath, allowDownload);
+  const forceRedownload = values.redownload === true;
+
+  // Handle redownload-only mode
+  if (forceRedownload) {
+    console.error(`Re-downloading database to ${dbPath}...`);
+    await ensureDbPath(dbPath, allowDownload, true);
+    console.error("Download complete.");
+    return;
+  }
+
+  const resolvedDbPath = await ensureDbPath(dbPath, allowDownload, false);
 
   const db = new Database(resolvedDbPath, { readonly: true });
   const adapter = new BunSqliteAdapter(db);
