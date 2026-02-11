@@ -303,7 +303,7 @@ const HokkienDictionary = () => {
               if (foundResults.has(substring)) continue;
 
               const stmt = db.prepare(
-                `SELECT id, hanzi FROM entries WHERE hanzi = $term`,
+                `SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'`,
               );
               const matchedEntries: Result[] = [];
               stmt.bind({ $term: substring });
