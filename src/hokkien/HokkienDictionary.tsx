@@ -34,6 +34,7 @@ import type { PhoneticQuery, Result, ToneGroup } from "./types";
 import { ErrorMessage, Spinner, StyledRadio } from "./components/common";
 import { ResultsList } from "./components/ResultsList";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
+import { MODE_TO_QUERY_PARAM, QUERY_PARAM_TO_MODE } from "./queryParams";
 import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
 import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
@@ -135,36 +136,8 @@ const HokkienDictionary = () => {
     return () => media.removeListener(onChange);
   }, [themeMode]);
 
-  const queryKeyToMode = useMemo(
-    () => ({
-      q: "hokkien_entry",
-      he: "hokkien_entry",
-      me: "mandarin_example",
-      hf: "hokkien_example",
-      mf: "mandarin_fulltext",
-      rx: "regex",
-      hft: "hokkien_fulltext",
-      cat: "category",
-      qs: "multi_search",
-      su: "single_entry",
-    }),
-    [],
-  );
-
-  const modeToQueryKey = useMemo(
-    () => ({
-      hokkien_entry: "q",
-      mandarin_example: "me",
-      hokkien_example: "hf",
-      mandarin_fulltext: "mf",
-      regex: "rx",
-      hokkien_fulltext: "hft",
-      category: "cat",
-      multi_search: "qs",
-      single_entry: "su",
-    }),
-    [],
-  );
+  const queryKeyToMode = useMemo(() => QUERY_PARAM_TO_MODE, []);
+  const modeToQueryKey = useMemo(() => MODE_TO_QUERY_PARAM, []);
 
   const runSearch = useCallback(
     (term: string, mode: string) => {
