@@ -34,7 +34,12 @@ import type { PhoneticQuery, Result, ToneGroup } from "./types";
 import { ErrorMessage, Spinner, StyledRadio } from "./components/common";
 import { ResultsList } from "./components/ResultsList";
 import { ToneGroupDisplay } from "./components/ToneGroupDisplay";
-import { MODE_TO_QUERY_PARAM, QUERY_PARAM_TO_MODE } from "./queryParams";
+import {
+  FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+  MODE_TO_QUERY_PARAM,
+  QUERY_PARAM_TO_MODE,
+  getFallbackAutoSwitchModes,
+} from "./queryParams";
 import { CategoryModal } from "./modals/CategoryModal";
 import { PhoneticPickerModal } from "./modals/PhoneticPickerModal";
 import { SettingsModal, type ThemeMode } from "./modals/SettingsModal";
@@ -43,6 +48,8 @@ import { parse as parseJsonc } from "jsonc-parser";
 import modeHelpText from "../../data/mode-help.jsonc?raw";
 
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
+const FALLBACK_AUTO_SWITCH_STORAGE_KEY =
+  "hokkien-sutian:fallback-auto-switch-query-mode";
 
 type ModeHelpExampleLink = {
   url: string;
@@ -87,6 +94,20 @@ const HokkienDictionary = () => {
   const [isGlobalHelpOpen, setGlobalHelpOpen] = useState(false);
   const [forceSingleColumn, setForceSingleColumn] = useState(false);
   const [alwaysShowButtons, setAlwaysShowButtons] = useState(true);
+  const [fallbackAutoSwitchQueryMode, setFallbackAutoSwitchQueryMode] =
+    useState<boolean>(() => {
+      if (typeof window === "undefined") return true;
+      const saved = window.localStorage.getItem(
+        FALLBACK_AUTO_SWITCH_STORAGE_KEY,
+      );
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+      return true;
+    });
+  const [
+    fallbackAutoSwitchQueryModeOverride,
+    setFallbackAutoSwitchQueryModeOverride,
+  ] = useState<boolean | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -106,6 +127,18 @@ const HokkienDictionary = () => {
       // Ignore storage errors (private mode, disabled storage, etc.)
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        FALLBACK_AUTO_SWITCH_STORAGE_KEY,
+        fallbackAutoSwitchQueryMode ? "1" : "0",
+      );
+    } catch {
+      // Ignore storage errors (private mode, disabled storage, etc.)
+    }
+  }, [fallbackAutoSwitchQueryMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -139,8 +172,45 @@ const HokkienDictionary = () => {
   const queryKeyToMode = useMemo(() => QUERY_PARAM_TO_MODE, []);
   const modeToQueryKey = useMemo(() => MODE_TO_QUERY_PARAM, []);
 
+  const getEffectiveFallbackAutoSwitchEnabled = useCallback(
+    (override: boolean | null = fallbackAutoSwitchQueryModeOverride) =>
+      override ?? fallbackAutoSwitchQueryMode,
+    [fallbackAutoSwitchQueryMode, fallbackAutoSwitchQueryModeOverride],
+  );
+
+  const updateUrlModeAndTerm = useCallback(
+    (mode: string, term: string) => {
+      if (typeof window === "undefined") return;
+      const queryKey = modeToQueryKey[mode as keyof typeof modeToQueryKey];
+      if (!queryKey) return;
+
+      const params = new URLSearchParams(window.location.search);
+      for (const key of Object.keys(queryKeyToMode)) {
+        params.delete(key);
+      }
+      params.set(queryKey, term);
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
+
+      const query = params.toString();
+      const newUrl = query
+        ? `${window.location.pathname}?${query}`
+        : window.location.pathname;
+      window.history.replaceState({ path: newUrl }, "", newUrl);
+    },
+    [fallbackAutoSwitchQueryModeOverride, modeToQueryKey, queryKeyToMode],
+  );
+
   const runSearch = useCallback(
-    (term: string, mode: string) => {
+    (
+      term: string,
+      mode: string,
+      options?: { fallbackAutoSwitchOverride?: boolean | null },
+    ) => {
       if (!db || !term.trim()) {
         setResults([]);
         return;
@@ -153,8 +223,36 @@ const HokkienDictionary = () => {
       setError(null);
 
       try {
-        const results = performSearch(db, term, mode as SearchMode);
-        setResults(results);
+        const modeToTry = mode as SearchMode;
+        const shouldFallbackAutoSwitch = getEffectiveFallbackAutoSwitchEnabled(
+          options?.fallbackAutoSwitchOverride,
+        );
+
+        const fallbackModes = shouldFallbackAutoSwitch
+          ? getFallbackAutoSwitchModes(modeToTry)
+          : [modeToTry];
+
+        let chosenMode = modeToTry;
+        let finalResults: Result[] = [];
+
+        for (const candidateMode of fallbackModes) {
+          const candidateResults = performSearch(db, term, candidateMode);
+          if (candidateResults.length > 0) {
+            chosenMode = candidateMode;
+            finalResults = candidateResults;
+            break;
+          }
+
+          if (candidateMode === modeToTry) {
+            finalResults = candidateResults;
+          }
+        }
+
+        setResults(finalResults);
+        if (chosenMode !== modeToTry) {
+          setSearchMode(chosenMode);
+          updateUrlModeAndTerm(chosenMode, term.trim());
+        }
       } catch (err) {
         console.error("Search error:", err);
         setError("查詢時發生錯誤，請檢查您的語法是否正確。");
@@ -162,7 +260,7 @@ const HokkienDictionary = () => {
         setSearching(false);
       }
     },
-    [db],
+    [db, getEffectiveFallbackAutoSwitchEnabled, updateUrlModeAndTerm],
   );
 
   const handleRandomWord = useCallback(() => {
@@ -181,12 +279,18 @@ const HokkienDictionary = () => {
 
       const params = new URLSearchParams();
       params.set("q", result.hanzi);
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
     }
 
     setSearching(false);
-  }, [db]);
+  }, [db, fallbackAutoSwitchQueryModeOverride]);
 
   const handleCategorySelect = useCallback(
     (category: string) => {
@@ -197,12 +301,20 @@ const HokkienDictionary = () => {
       setSearchTerm(category);
       setSearchMode("category");
 
-      const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+      const params = new URLSearchParams();
+      params.set("cat", category);
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
-      runSearch(category, "category");
+      runSearch(category, "category", { fallbackAutoSwitchOverride: false });
     },
-    [runSearch],
+    [fallbackAutoSwitchQueryModeOverride, runSearch],
   );
 
   const handleCategoryClick = useCallback(
@@ -213,12 +325,20 @@ const HokkienDictionary = () => {
       setSearchTerm(category);
       setSearchMode("category");
 
-      const newUrl = `${window.location.pathname}?cat=${encodeURIComponent(category)}`;
+      const params = new URLSearchParams();
+      params.set("cat", category);
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
-      runSearch(category, "category");
+      runSearch(category, "category", { fallbackAutoSwitchOverride: false });
     },
-    [runSearch],
+    [fallbackAutoSwitchQueryModeOverride, runSearch],
   );
 
   const handlePhoneticSearch = useCallback(
@@ -255,6 +375,12 @@ const HokkienDictionary = () => {
         if (query.final) params.set("sf", query.final);
         if (query.tone) params.set("st", query.tone.toString());
         if (!query.singleSyllableOnly) params.set("sm", "0");
+        if (fallbackAutoSwitchQueryModeOverride !== null) {
+          params.set(
+            FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+            fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+          );
+        }
         const newUrl = `${window.location.pathname}?${params.toString()}`;
         window.history.pushState({ path: newUrl }, "", newUrl);
       } catch (err) {
@@ -264,7 +390,7 @@ const HokkienDictionary = () => {
         setSearching(false);
       }
     },
-    [db],
+    [db, fallbackAutoSwitchQueryModeOverride],
   );
 
   const handleSearchModeChange = (newMode: string) => {
@@ -275,7 +401,15 @@ const HokkienDictionary = () => {
     const trimmedSearchTerm = searchTerm.trim();
     if (trimmedSearchTerm && !trimmedSearchTerm.startsWith("(隨機)")) {
       const queryKey = modeToQueryKey[newMode as keyof typeof modeToQueryKey];
-      const newUrl = `${window.location.pathname}?${queryKey}=${encodeURIComponent(trimmedSearchTerm)}`;
+      const params = new URLSearchParams();
+      params.set(queryKey, trimmedSearchTerm);
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
       runSearch(trimmedSearchTerm, newMode);
     }
@@ -284,7 +418,15 @@ const HokkienDictionary = () => {
   const handlePermalinkClick = useCallback(
     (id: number) => {
       if (!db) return;
-      const newUrl = `${window.location.pathname}?su=${id}`;
+      const params = new URLSearchParams();
+      params.set("su", String(id));
+      if (fallbackAutoSwitchQueryModeOverride !== null) {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+        );
+      }
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
       setIsSingleEntryView(true);
@@ -293,7 +435,7 @@ const HokkienDictionary = () => {
       const result = fetchEntryDetails(db, id);
       setResults(result ? [result] : []);
     },
-    [db],
+    [db, fallbackAutoSwitchQueryModeOverride],
   );
 
   const handleTitleClick = (e: React.MouseEvent) => {
@@ -304,11 +446,18 @@ const HokkienDictionary = () => {
     setResults([]);
     setSearchTerm("");
     setSearchMode("hokkien_entry");
-    window.history.pushState(
-      { path: window.location.pathname },
-      "",
-      window.location.pathname,
-    );
+    const params = new URLSearchParams();
+    if (fallbackAutoSwitchQueryModeOverride !== null) {
+      params.set(
+        FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+        fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+      );
+    }
+    const query = params.toString();
+    const newUrl = query
+      ? `${window.location.pathname}?${query}`
+      : window.location.pathname;
+    window.history.pushState({ path: newUrl }, "", newUrl);
   };
 
   const syncStateWithUrl = useCallback(
@@ -330,6 +479,15 @@ const HokkienDictionary = () => {
         setSearching(false);
         return;
       }
+
+      const fallbackOverrideRaw = params.get(FALLBACK_AUTO_SWITCH_QUERY_PARAM);
+      const fallbackOverride =
+        fallbackOverrideRaw === "1"
+          ? true
+          : fallbackOverrideRaw === "0"
+            ? false
+            : null;
+      setFallbackAutoSwitchQueryModeOverride(fallbackOverride);
 
       if (params.has("si") || params.has("sf") || params.has("st")) {
         const query: PhoneticQuery = {
@@ -359,7 +517,9 @@ const HokkienDictionary = () => {
       setSearchTerm(initialTerm);
       setSearchMode(initialMode);
       if (initialTerm) {
-        runSearch(initialTerm, initialMode);
+        runSearch(initialTerm, initialMode, {
+          fallbackAutoSwitchOverride: fallbackOverride,
+        });
       } else {
         setResults([]);
       }
@@ -511,6 +671,12 @@ const HokkienDictionary = () => {
     const queryKey = modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
     const params = new URLSearchParams();
     if (termToSearch) params.set(queryKey, termToSearch);
+    if (fallbackAutoSwitchQueryModeOverride !== null) {
+      params.set(
+        FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+        fallbackAutoSwitchQueryModeOverride ? "1" : "0",
+      );
+    }
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
     runSearch(termToSearch, searchMode);
@@ -668,9 +834,16 @@ const HokkienDictionary = () => {
                         );
 
                         window.history.pushState(
-                          { path: window.location.pathname },
+                          {
+                            path:
+                              fallbackAutoSwitchQueryModeOverride === null
+                                ? window.location.pathname
+                                : `${window.location.pathname}?${FALLBACK_AUTO_SWITCH_QUERY_PARAM}=${fallbackAutoSwitchQueryModeOverride ? "1" : "0"}`,
+                          },
                           "",
-                          window.location.pathname,
+                          fallbackAutoSwitchQueryModeOverride === null
+                            ? window.location.pathname
+                            : `${window.location.pathname}?${FALLBACK_AUTO_SWITCH_QUERY_PARAM}=${fallbackAutoSwitchQueryModeOverride ? "1" : "0"}`,
                         );
                       }
                     }}
@@ -793,6 +966,8 @@ const HokkienDictionary = () => {
         onForceSingleColumnChange={setForceSingleColumn}
         alwaysShowButtons={alwaysShowButtons}
         onAlwaysShowButtonsChange={setAlwaysShowButtons}
+        fallbackAutoSwitchQueryMode={fallbackAutoSwitchQueryMode}
+        onFallbackAutoSwitchQueryModeChange={setFallbackAutoSwitchQueryMode}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
       />

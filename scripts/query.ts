@@ -24,6 +24,7 @@ import type { Result, ToneGroup } from "../src/hokkien/types";
 
 import {
   QUERY_PARAM_TO_MODE,
+  getFallbackAutoSwitchModes,
   isQueryParamModeKey,
 } from "../src/hokkien/queryParams";
 import {
@@ -877,8 +878,10 @@ const renderInkResults = async (payload: {
 
   const instance = render(React.createElement(InkView));
   // ink 6 returns a stable instance with waitUntilExit
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-  await (instance as any).waitUntilExit?.();
+  const maybeWithWaitUntilExit = instance as {
+    waitUntilExit?: () => void | Promise<void>;
+  };
+  await maybeWithWaitUntilExit.waitUntilExit?.();
 };
 
 const main = async () => {
@@ -912,6 +915,13 @@ const main = async () => {
     .option("--sf <final>", "Final/rhyme (韻母) (phonetic mode)")
     .option("--st <tone>", "Tone number (調號) (phonetic mode)")
     .option("--sm <0|1>", "Single syllable only (default: 1), use 0 to disable")
+    .option(
+      "--fallback-auto-switch-query-mode",
+      "Automatically switch to next query mode when current mode has no results",
+      {
+        default: true,
+      },
+    )
     .help();
 
   cli.help((sections) => {
@@ -921,6 +931,7 @@ const main = async () => {
       body:
         "- You can pass web-style mode codes like qs, q, me, hf, mf, rx, hft, cat, su.\n" +
         "- Mode defaults to qs (multi_search).\n" +
+        "- Fallback auto-switch is enabled by default; use --no-fallback-auto-switch-query-mode to disable.\n" +
         "- You can also use positional args: hokkien-sutian-query [mode] [term]." +
         extra,
     });
@@ -934,8 +945,8 @@ const main = async () => {
   if (options.help === true) {
     // With run:false, cac won't auto-exit after printing help.
     // Ensure we *only* show help when --help is specified.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-    (cli as any).outputHelp?.();
+    const maybeCli = cli as { outputHelp?: () => void };
+    maybeCli.outputHelp?.();
     return;
   }
 
@@ -947,6 +958,8 @@ const main = async () => {
   const isAlfred = options.alfred === true;
   const isRandom = options.random === true;
   const showPhoneticDifferences = options.phoneticDifferences !== false;
+  const fallbackAutoSwitchQueryMode =
+    options.fallbackAutoSwitchQueryMode !== false;
 
   const appBaseUrl = resolveAppBaseUrl(options);
 
@@ -1100,11 +1113,27 @@ const main = async () => {
       throw new Error(`Unsupported mode: ${mode}`);
     }
 
-    const results = performSearch(adapter, termValue, mode);
+    const modesToTry = fallbackAutoSwitchQueryMode
+      ? getFallbackAutoSwitchModes(mode)
+      : [mode];
+
+    let effectiveMode = mode;
+    let results: Result[] = [];
+    for (const candidateMode of modesToTry) {
+      const candidateResults = performSearch(adapter, termValue, candidateMode);
+      if (candidateResults.length > 0) {
+        effectiveMode = candidateMode as typeof effectiveMode;
+        results = candidateResults;
+        break;
+      }
+      if (candidateMode === mode) {
+        results = candidateResults;
+      }
+    }
 
     if (isInk) {
       await renderInkResults({
-        mode,
+        mode: effectiveMode,
         term: termValue,
         results,
         appBaseUrl,
@@ -1119,7 +1148,12 @@ const main = async () => {
       return;
     }
 
-    const payload = { mode, term: termValue, results };
+    const payload = {
+      mode: effectiveMode,
+      requestedMode: mode,
+      term: termValue,
+      results,
+    };
     const indent = pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, indent));
   } finally {
