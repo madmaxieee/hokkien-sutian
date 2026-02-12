@@ -2,302 +2,528 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "jieba", "loguru", "selectolax", "pyhtml2md",
-# "opencc",
+#     "loguru",
 # ]
 # ///
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
-import tempfile
-from urllib.parse import quote, unquote
-import jieba
-import jieba.posseg as pseg
-import pyhtml2md
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
+
 from loguru import logger
-from selectolax.lexbor import LexborHTMLParser
-import re
 
 # --- Configuration ---
-# Configure logger to output to stderr
 logger.remove()
 logger.add(
     sys.stderr,
     level="INFO",
     format="<level>{level: <8}</level> | <level>{message}</level>",
 )
-# URL template for the dictionary service
-DICT_URL_TEMPLATE = "https://sutian.moe.edu.tw/zh-hant/tshiau/?lui=hua_ku&tsha={query}"
-# Part-of-speech tags to drop from the query.
-# 'e' = interjection (嘆詞), 'y' = modal particle (語氣詞)
-POS_TO_DROP = {"e", "y"}
-# Default prompt to append for the LLM
-DEFAULT_LLM_PROMPT = '\n---\n### LLM INSTRUCTION\n\nBased on the original text and the provided dictionary lookups for each word, please translate the "Original Input" from 北平方言 to hokkien （需要漢字和音標）. Use the dictionary examples to ensure the translation is natural and accurate.\n'
-# --- Main Logic Functions ---
+
+DEFAULT_LLM_PROMPT = """\n---
+### LLM INSTRUCTION
+
+Based on the original text and the provided dictionary lookups for each word, please translate the "Original Input" from 北平方言 to hokkien （需要漢字和音標）. Use the dictionary examples to ensure the translation is natural and accurate.
+"""
+
+# --- Core Functions ---
 
 
-def trim_dictionary_content(content: str) -> str:
+def invoke_cli(
+    term: str,
+    mode: str = "qs",
+    db_path: str | None = None,
+    no_fallback: bool = False,
+) -> dict[str, Any]:
     """
-    Trims the dictionary lookup section of the input content to reduce size.
+    Invokes the hokkien-sutian-query CLI and returns parsed JSON.
 
     Args:
-        content: The full string content of the input file.
+        term: The search term.
+        mode: The search mode (default: qs).
+        db_path: Optional database path.
+        no_fallback: Disable CLI fallback auto-switch.
 
     Returns:
-        The trimmed string content.
+        Parsed JSON dict with keys: mode, requestedMode, term, results.
     """
-    # Isolate the dictionary section to avoid accidentally modifying other parts.
-    dict_marker = "## Dictionary Lookup Results"
-    marker_pos = content.find(dict_marker)
-    if marker_pos == -1:
-        logger.warning(
-            f"Could not find the '{dict_marker}' marker. Applying trimming rules to the entire file."
-        )
-        header = ""
-        body_to_process = content
-    else:
-        # Split content into the part before the dictionary and the dictionary itself.
-        header = content[: marker_pos + len(dict_marker)]
-        body_to_process = content[marker_pos + len(dict_marker) :]
-    # 1. Remove redundant '播放用例' lines.
-    logger.info("Step 1 (trim): Removing redundant '播放用例' lines...")
-    trimmed_body, removals_count = re.subn(
-        "^\\s*播放用例.*\\n?", "", body_to_process, flags=re.MULTILINE
-    )
-    logger.info(f"Removed {removals_count} '播放用例' lines.")
-    # 2. Reformat '來源詞目' lines to remove links and excess text.
-    logger.info(
-        "Step 2 (trim): Reformatting '來源詞目' lines and removing links..."
-    )  # Replace with: (translation) 來源：source_word
-    reformatted_body, subs_count = re.subn(
-        "(\\(.*\\))\\s*來源詞目：\\s*\\[\\s*(.*?)\\s*\\]\\(.*\\)",
-        "\\1 來源：\\2",
-        trimmed_body,
-    )
-    logger.info(f"Reformatted {subs_count} '來源詞目' lines.")
-    # Re-assemble the document
-    return header + reformatted_body
+    cmd = ["bun", "run", "scripts/query.ts", mode, term, "--no-pretty"]
+    if db_path:
+        cmd.extend(["--db", db_path])
+    if no_fallback:
+        cmd.append("--no-fallback-auto-switch-query-mode")
 
-
-def segment_text(
-    text: str, mode: str, tw_to_cn_converter, cn_to_tw_converter
-) -> list[str]:
-    """
-    Converts text to Simplified Chinese for better segmentation, performs
-    segmentation, converts words back to Traditional, and filters.
-
-    Args:
-        text: The input string in Traditional Chinese.
-        mode: The segmentation mode ('accurate', 'full', 'search').
-        tw_to_cn_converter: OpenCC instance for TW -> CN conversion.
-        cn_to_tw_converter: OpenCC instance for CN -> TW conversion.
-
-    Returns:
-        A list of unique, valid words to be queried.
-    """
-    logger.info(f"Using '{mode}' segmentation mode.")
-    logger.info("Converting input to Simplified Chinese for jieba processing...")
-    simplified_text = tw_to_cn_converter.convert(text)
-    words_to_query = []
-    dropped_words = []
-    if mode == "accurate":
-        logger.info("Performing segmentation with POS tagging...")
-        words_with_flags_cn = pseg.cut(simplified_text)
-        for word_cn, flag in words_with_flags_cn:
-            word_cn = word_cn.strip()
-            if not word_cn:
-                continue
-            # Convert back to Traditional Chinese for the final list
-            word_tw = cn_to_tw_converter.convert(word_cn)
-            if flag in POS_TO_DROP:
-                dropped_words.append(f"{word_tw} ({flag})")
-            else:
-                words_to_query.append(word_tw)
-    else:
-        # Full and Search modes do not support POS tagging.
-        logger.warning(
-            f"POS-based filtering (for interjections) is not supported in '{mode}' mode. All parts will be queried."
-        )
-        if mode == "full":
-            segmented_words_cn = jieba.cut(simplified_text, cut_all=True)
-        elif mode == "search":
-            segmented_words_cn = jieba.cut_for_search(simplified_text)
-        for word_cn in segmented_words_cn:
-            word_cn = word_cn.strip()
-            if not word_cn:
-                continue
-            # Convert back to Traditional Chinese
-            words_to_query.append(cn_to_tw_converter.convert(word_cn))
-    # Return unique words while preserving order of first appearance
-    seen = set()
-    unique_filtered_words = [
-        x for x in words_to_query if not (x in seen or seen.add(x))
-    ]
-    logger.info(
-        f"Kept {len(unique_filtered_words)} unique words for lookup: {', '.join(unique_filtered_words)}"
-    )
-    if dropped_words:
-        logger.info(
-            f"Dropped {len(dropped_words)} words (interjections/particles): {', '.join(dropped_words)}"
-        )
-    return unique_filtered_words
-
-
-def run_parallel_downloader(
-    query_words: list[str], temp_dir: pathlib.Path
-) -> dict[str, pathlib.Path]:
-    """
-    Calls the download_preserve_path_to_dir_structure.py script as a subprocess
-    to download dictionary pages in parallel.
-
-    Args:
-        query_words: A list of words to look up.
-        temp_dir: The temporary directory to store downloaded files.
-
-    Returns:
-        A dictionary mapping each query word to its downloaded HTML file path.
-    """
-    if not query_words:
-        return {}
-    logger.info(
-        f"Preparing to download dictionary entries for {len(query_words)} words in parallel..."
-    )
-    urls = [DICT_URL_TEMPLATE.format(query=quote(word)) for word in query_words]
-    urls_input_str = "\n".join(urls)
-    downloader_script = "download_preserve_path_to_dir_structure.py"
-    # Create a temporary file path for the JSON map. The file is created but closed
-    # immediately so the subprocess can write to it. It will be cleaned up in the finally block.
-    json_map_file = tempfile.NamedTemporaryFile(
-        mode="w", delete=False, suffix=".json", dir=temp_dir
-    )
-    json_map_path = json_map_file.name
-    json_map_file.close()
-    logger.debug(f"Using temporary file for downloader's JSON map: {json_map_path}")
-    # Command to execute. We now provide a file path to the -j argument.
-    # Write JSON map to our temp file
-    command = [
-        downloader_script,
-        "-o",
-        str(temp_dir),
-        "--flatten",
-        "-j",
-        json_map_path,
-        "--no-aio",
-    ]
-    logger.debug(f"Running subprocess: {' '.join(command)}")
+    logger.debug(f"Invoking CLI: {' '.join(cmd)}")
     try:
-        # We pipe the URLs to the subprocess's stdin
         result = subprocess.run(
-            command,
-            input=urls_input_str,
+            cmd,
             capture_output=True,
             text=True,
             check=True,
             encoding="utf-8",
         )
-        if result.stderr:
-            # Downloader script logs its progress to stderr, which is normal.
-            logger.debug(f"Downloader stderr:\n{result.stderr.strip()}")
-        # After the process completes, read the JSON map from the temp file
-        with open(json_map_path, "r", encoding="utf-8") as f:
-            url_to_path_map = json.load(f)
-        word_to_path_map = {}
-        for word in query_words:
-            url = DICT_URL_TEMPLATE.format(query=quote(word))
-            if url in url_to_path_map:
-                word_to_path_map[word] = pathlib.Path(url_to_path_map[url])
-            else:
-                logger.warning(
-                    f"No downloaded file path found for query word: '{word}'"
-                )
-        logger.info("Parallel download process completed.")
-        return word_to_path_map
+        return json.loads(result.stdout)
     except FileNotFoundError:
-        logger.error(
-            f"FATAL: The downloader script '{downloader_script}' was not found."
-        )
-        logger.error(
-            "Please ensure it is in the same directory or in your system's PATH."
-        )
+        logger.error("FATAL: 'bun' command not found. Please install Bun.")
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        logger.error("The downloader script exited with an error.")
-        logger.error(f"Exit Code: {e.returncode}")
-        logger.error(f"Downloader Stderr:\n{e.stderr}")
+        logger.error(f"CLI command failed with exit code {e.returncode}")
+        logger.error(f"Stderr: {e.stderr}")
         sys.exit(1)
-    except json.JSONDecodeError:
-        logger.error(
-            f"Failed to parse the JSON output from the map file: {json_map_path}"
-        )
-        try:
-            with open(json_map_path, "r") as f_err:
-                logger.error(f"Content of map file:\n{f_err.read()}")
-        except Exception:
-            pass  # Avoid cascading errors if file can't be read.
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse CLI JSON output: {e}")
         sys.exit(1)
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while running the downloader: {e}")
-        sys.exit(1)
-    finally:
-        # Clean up the temporary JSON map file
-        pathlib.Path(json_map_path).unlink(missing_ok=True)
 
 
-def extract_and_convert_html(
-    html_path: pathlib.Path, query_word: str, is_char_lookup: bool = False
-) -> tuple[bool, str]:
+def normalize_hanzi(hanzi: str) -> str:
     """
-    Parses a downloaded HTML file, extracts the relevant content, and converts it to Markdown.
+    Normalizes hanzi by stripping annotations like 【白】, 【文】, 【替】.
 
     Args:
-        html_path: Path to the HTML file.
-        query_word: The original word or character queried.
-        is_char_lookup: Flag to adjust the header level for character lookups.
+        hanzi: The hanzi string to normalize.
 
     Returns:
-        A tuple containing:
-        - bool: True if results were found, False otherwise.
-        - str: A formatted Markdown string of the dictionary results.
+        Normalized hanzi string.
     """
-    header_level = "#### └─" if is_char_lookup else "###"
-    query_type = "字元" if is_char_lookup else "詞語"
-    logger.debug(f"Extracting content for '{query_word}' from '{html_path.name}'...")
+    return re.sub(r"【[^】]+】", "", hanzi)
+
+
+def group_results_by_hanzi(results: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    """
+    Groups results by normalized hanzi.
+
+    Args:
+        results: List of Result dicts from CLI.
+
+    Returns:
+        List of (normalized_hanzi, [result_dicts]) tuples.
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for result in results:
+        normalized = normalize_hanzi(result["hanzi"])
+        if normalized not in groups:
+            groups[normalized] = []
+        groups[normalized].append(result)
+    return list(groups.items())
+
+
+def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> str:
+    """
+    Formats a single Result dict as Markdown.
+
+    Args:
+        entry: A Result dict.
+        header_level: Markdown header level (default: ####).
+
+    Returns:
+        Formatted Markdown string.
+    """
+    lines = []
+
+    # Header: hanzi romanization (#id)
+    lines.append(f"{header_level} {entry['hanzi']} {entry['romanization']} (#{entry['id']})")
+    lines.append("")
+
+    # Category
+    if entry.get("category"):
+        lines.append(f"**分類：** {entry['category']}")
+        lines.append("")
+
+    # Meanings
+    for meaning in entry.get("meanings", []):
+        pos = meaning.get("part_of_speech", "")
+        explanation = meaning.get("explanation", "")
+        examples = meaning.get("examples", [])
+        display_id = meaning.get("display_id", 0)
+
+        # Numbered meaning with POS and explanation
+        lines.append(f"{display_id}. ({pos}) {explanation}")
+
+        # Examples
+        for example in examples:
+            hanzi_ex = example.get("hanzi", "")
+            romanization_ex = example.get("romanization", "")
+            mandarin_ex = example.get("mandarin_translation", "")
+            lines.append(f"   - {hanzi_ex} ({romanization_ex})")
+            if mandarin_ex:
+                lines.append(f"     {mandarin_ex}")
+
+        lines.append("")
+
+    # Entry synonyms
+    entry_synonyms = entry.get("entry_synonyms", [])
+    if entry_synonyms:
+        synonym_strs = [f"{syn['hanzi']} (#{syn['id']})" for syn in entry_synonyms]
+        lines.append(f"**近義詞：** {', '.join(synonym_strs)}")
+        lines.append("")
+
+    # Meaning synonyms (serialized as object, not Map)
+    meaning_synonyms = entry.get("meaning_synonyms", {})
+    if meaning_synonyms:
+        lines.append("**義近詞：**")
+        for meaning_id, synonyms in meaning_synonyms.items():
+            for syn in synonyms:
+                syn_hanzi = syn.get("hanzi", "")
+                syn_explanation = syn.get("explanation", "")
+                lines.append(f"   - {syn_hanzi}: {syn_explanation}")
+        lines.append("")
+
+    # Variant characters
+    variants = entry.get("variant_characters", [])
+    if variants:
+        lines.append(f"**異體字：** {', '.join(variants)}")
+        lines.append("")
+
+    # Alternative pronunciations
+    alt_pronunciations = entry.get("alternative_pronunciations", [])
+    if alt_pronunciations:
+        lines.append("**又音：**")
+        for alt in alt_pronunciations:
+            lines.append(f"   - {alt['hanzi']} {alt['romanization']}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def format_query_section(
+    query_word: str,
+    entries: list[dict[str, Any]],
+    is_char_fallback: bool = False,
+) -> str:
+    """
+    Formats a section for a query word with its entries.
+
+    Args:
+        query_word: The original query word.
+        entries: List of Result dicts.
+        is_char_fallback: Whether this is a character fallback section.
+
+    Returns:
+        Formatted Markdown section.
+    """
+    header_level = "#### └─" if is_char_fallback else "###"
+    query_type = "字元查詢" if is_char_fallback else "詞語查詢"
+
+    lines = [f"{header_level} {query_type}：「{query_word}」", ""]
+
+    if not entries:
+        lines.append("*（無查詢結果）*")
+    else:
+        entry_header = "##### " if is_char_fallback else "####"
+        for entry in entries:
+            lines.append(format_entry_markdown(entry, entry_header))
+            lines.append("")
+
+    lines.append("---")
+    return "\n".join(lines)
+
+
+def assemble_document(
+    input_text: str,
+    sections: list[str],
+    prompt: str,
+) -> str:
+    """
+    Assembles the final Markdown document.
+
+    Args:
+        input_text: The original input text.
+        sections: List of formatted section strings.
+        prompt: The LLM instruction prompt.
+
+    Returns:
+        Complete Markdown document.
+    """
+    parts = [
+        "# Translation Pre-processing Document\n",
+        "## Original Input\n",
+        f"> {input_text}\n",
+        "---\n",
+        "## Dictionary Lookup Results\n",
+    ]
+    parts.extend(sections)
+    if prompt:
+        parts.append(prompt.strip())
+    return "\n".join(parts)
+
+
+def segment_with_jieba(text: str) -> list[str]:
+    """
+    Segments text with jieba using TW->CN conversion, segmentation, and CN->TW back.
+    Filters interjections and deduplicates.
+
+    Args:
+        text: Input Traditional Chinese text.
+
+    Returns:
+        List of unique segmented words.
+    """
     try:
-        html_content = html_path.read_text(encoding="utf-8")
-        tree = LexborHTMLParser(html_content)
-        # The target content is within <ol class="text-secondary">
-        target_node = tree.css_first("ol.text-secondary")
-        if not target_node:
-            logger.warning(
-                f"No dictionary results found in the HTML for '{query_word}'."
-            )
-            no_result_md = f"{header_level} {query_type}查詢：「{query_word}」\n\n*（無查詢結果）*\n\n---"
-            return (False, no_result_md)
-        # Get the HTML of the node and convert it to Markdown
-        html_snippet = target_node.html
-        markdown_content = pyhtml2md.convert(html_snippet).strip()
-        # Clean up excessive newlines that pyhtml2md might create from list items
-        markdown_content = "\n".join(
-            (line.strip() for line in markdown_content.splitlines() if line.strip())
-        )
-        success_md = f"{header_level} {query_type}查詢：「{query_word}」\n\n{markdown_content}\n\n---"
-        return (True, success_md)
-    except Exception as e:
-        logger.error(
-            f"Failed to process file '{html_path}' for query '{query_word}': {e}"
-        )
-        error_md = f"{header_level} {query_type}查詢：「{query_word}」\n\n*（處理檔案時發生錯誤）*\n\n---"
-        return (False, error_md)
+        import jieba
+        import jieba.posseg as pseg
+        import opencc
+    except ImportError:
+        logger.error("FATAL: jieba or opencc not available.")
+        logger.error("Please run: uv run --with jieba --with opencc <script> --jieba ...")
+        sys.exit(1)
+
+    logger.info("Initializing jieba...")
+    jieba.initialize()
+
+    logger.info("Initializing OpenCC converters...")
+    tw_to_cn = opencc.OpenCC("tw2s.json")
+    cn_to_tw = opencc.OpenCC("s2twp.json")
+
+    logger.info("Converting to Simplified Chinese for segmentation...")
+    simplified_text = tw_to_cn.convert(text)
+
+    logger.info("Segmenting with jieba...")
+    pos_to_drop = {"e", "y"}  # interjections, modal particles
+    words_to_query = []
+    dropped_words = []
+
+    for word_cn, flag in pseg.cut(simplified_text):
+        word_cn = word_cn.strip()
+        if not word_cn:
+            continue
+        word_tw = cn_to_tw.convert(word_cn)
+        if flag in pos_to_drop:
+            dropped_words.append(f"{word_tw} ({flag})")
+        else:
+            words_to_query.append(word_tw)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_words = [x for x in words_to_query if not (x in seen or seen.add(x))]
+
+    logger.info(f"Segmented into {len(unique_words)} unique words: {', '.join(unique_words)}")
+    if dropped_words:
+        logger.info(f"Dropped {len(dropped_words)} interjections/particles: {', '.join(dropped_words)}")
+
+    return unique_words
+
+
+def query_all_jieba(
+    words: list[str],
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_workers: int,
+) -> dict[str, dict[str, Any]]:
+    """
+    Queries all words in parallel using ThreadPoolExecutor.
+
+    Args:
+        words: List of words to query.
+        mode: CLI search mode.
+        db_path: Optional database path.
+        no_fallback: Disable fallback auto-switch.
+        max_workers: Max parallel workers.
+
+    Returns:
+        Dict mapping word -> CLI response dict.
+    """
+    logger.info(f"Querying {len(words)} words in parallel (max_workers={max_workers})...")
+    results = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_word = {
+            executor.submit(invoke_cli, word, mode, db_path, no_fallback): word
+            for word in words
+        }
+
+        for future in as_completed(future_to_word):
+            word = future_to_word[future]
+            try:
+                results[word] = future.result()
+            except Exception as e:
+                logger.error(f"Failed to query word '{word}': {e}")
+                results[word] = {"results": []}
+
+    return results
+
+
+def strip_cjk_punctuation(text: str) -> str:
+    """
+    Strips CJK punctuation from text.
+
+    Args:
+        text: Input text.
+
+    Returns:
+        Text with CJK punctuation removed.
+    """
+    # CJK punctuation ranges
+    return re.sub(r"[\u3000-\u303F\uFF00-\uFFEF]", "", text)
+
+
+def run_default_path(
+    input_text: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+) -> list[str]:
+    """
+    Runs the default path: single CLI call with qs mode on entire sentence.
+
+    Args:
+        input_text: The original input text.
+        mode: CLI search mode.
+        db_path: Optional database path.
+        no_fallback: Disable fallback auto-switch.
+
+    Returns:
+        List of formatted section strings.
+    """
+    # Strip CJK punctuation before querying, but keep original for display
+    query_text = strip_cjk_punctuation(input_text)
+
+    logger.info(f"Querying entire sentence: {query_text}")
+    response = invoke_cli(query_text, mode, db_path, no_fallback)
+
+    results = response.get("results", [])
+    logger.info(f"Found {len(results)} total results")
+
+    if not results:
+        return [format_query_section(input_text, [], is_char_fallback=False)]
+
+    # Group by normalized hanzi
+    groups = group_results_by_hanzi(results)
+
+    sections = []
+    for normalized_hanzi, group_results in groups:
+        sections.append(format_query_section(normalized_hanzi, group_results, is_char_fallback=False))
+
+    return sections
+
+
+def run_jieba_path(
+    input_text: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_workers: int,
+) -> list[str]:
+    """
+    Runs the jieba path: segment, parallel query, character fallback.
+
+    Args:
+        input_text: The original input text.
+        mode: CLI search mode.
+        db_path: Optional database path.
+        no_fallback: Disable fallback auto-switch.
+        max_workers: Max parallel workers.
+
+    Returns:
+        List of formatted section strings.
+    """
+    # Segment with jieba
+    words = segment_with_jieba(input_text)
+
+    if not words:
+        logger.warning("No words to query after segmentation.")
+        return []
+
+    # Query all words in parallel
+    word_results = query_all_jieba(words, mode, db_path, no_fallback, max_workers)
+
+    sections = []
+    failed_words = []
+
+    for word in words:
+        response = word_results.get(word, {"results": []})
+        results = response.get("results", [])
+
+        if results:
+            # Word found: format normally
+            sections.append(format_query_section(word, results, is_char_fallback=False))
+        else:
+            # Word not found: mark for character fallback
+            failed_words.append(word)
+            sections.append(format_query_section(word, [], is_char_fallback=False))
+
+    # Character fallback for failed multi-character words
+    if failed_words:
+        logger.info(f"Words without results: {', '.join(failed_words)}. Falling back to character-level lookup.")
+
+        # Collect unique characters from failed words
+        chars_to_lookup = []
+        seen_chars = set()
+        for word in failed_words:
+            if len(word) > 1:
+                for char in word:
+                    if char not in seen_chars:
+                        chars_to_lookup.append(char)
+                        seen_chars.add(char)
+
+        if chars_to_lookup:
+            logger.info(f"Looking up {len(chars_to_lookup)} characters: {', '.join(chars_to_lookup)}")
+            char_results = query_all_jieba(chars_to_lookup, mode, db_path, no_fallback, max_workers)
+
+            # Build a map of character -> results for easy lookup
+            char_to_entries = {}
+            for char, response in char_results.items():
+                char_to_entries[char] = response.get("results", [])
+
+            # Append character sections under each failed word
+            for word in failed_words:
+                if len(word) > 1:
+                    for char in word:
+                        if char in char_to_entries:
+                            sections.append(
+                                format_query_section(
+                                    char,
+                                    char_to_entries[char],
+                                    is_char_fallback=True,
+                                )
+                            )
+
+    return sections
+
+
+def read_input(args: argparse.Namespace) -> str:
+    """
+    Reads input from positional arg, --file, or stdin.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Input text string.
+    """
+    if args.input_text:
+        logger.info("Reading text from command-line argument...")
+        return args.input_text.strip()
+    elif args.file:
+        logger.info(f"Reading text from file: {args.file}...")
+        try:
+            return args.file.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            logger.error(f"Input file not found: {args.file}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error reading from file {args.file}: {e}")
+            sys.exit(1)
+    elif not sys.stdin.isatty():
+        logger.info("Reading text from standard input...")
+        return sys.stdin.read().strip()
+    else:
+        logger.error("No input text provided. Please provide text via argument, --file, or stdin.")
+        sys.exit(1)
 
 
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(
-        description="A pre-processor for Beijing Dialect to Hokkien translation. Reads text, looks up words in a dictionary, and generates a Markdown document for an LLM.",
+        description="Pre-processor for 北平方言 to Hokkien translation. Queries local dictionary DB via hokkien-sutian-query CLI and generates a Markdown document for LLM translation.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
+
+    # Input options
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument(
         "input_text",
@@ -311,19 +537,47 @@ def main():
         type=pathlib.Path,
         help="Path to a file containing the input text to process.",
     )
+
+    # Segmentation mode
     parser.add_argument(
-        "-S",
-        "--split-mode",
-        choices=["accurate", "full", "search"],
-        default="accurate",
-        help="The word segmentation mode to use for jieba library (default: accurate).",
+        "--jieba",
+        action="store_true",
+        help="Enable jieba segmentation mode (requires: uv run --with jieba --with opencc).",
     )
+
+    # CLI pass-through options
+    parser.add_argument(
+        "--db",
+        type=str,
+        help="Database path (passed to query.ts -d).",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="qs",
+        help="CLI search mode (default: qs).",
+    )
+    parser.add_argument(
+        "--no-fallback",
+        action="store_true",
+        help="Disable CLI fallback auto-switch.",
+    )
+
+    # Parallel execution
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=8,
+        help="ThreadPoolExecutor max workers for --jieba mode (default: 8).",
+    )
+
+    # Output options
     parser.add_argument(
         "-p",
         "--prompt",
         type=str,
         default=DEFAULT_LLM_PROMPT,
-        help="A custom prompt to append at the end of the generated Markdown file.",
+        help="Custom LLM instruction prompt to append.",
     )
     parser.add_argument(
         "-o",
@@ -331,150 +585,43 @@ def main():
         type=pathlib.Path,
         help="Output file path. If not specified, outputs to stdout.",
     )
-    parser.add_argument(
-        "-t",
-        "--trim",
-        action="store_true",
-        help="Trim redundant tokens from the dictionary results to save context space.",
-    )
-    args = parser.parse_args()
-    # 1. Determine and read input text
-    input_text = ""
-    if args.input_text:
-        logger.info("Reading text from command-line argument...")
-        input_text = args.input_text.strip()
-    elif args.file:
-        logger.info(f"Reading text from file: {args.file}...")
-        try:
-            input_text = args.file.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            logger.error(f"Input file not found: {args.file}")
-            sys.exit(1)
-        except Exception as e:
-            logger.error(f"Error reading from file {args.file}: {e}")
-            sys.exit(1)
-    elif not sys.stdin.isatty():
-        logger.info("Reading text from standard input...")
-        input_text = sys.stdin.read().strip()
-    if not input_text:
-        logger.error(
-            "No input text provided. Please provide text via argument, --file, or stdin."
-        )
-        parser.print_help()
-        sys.exit(1)
-    # Initialize OpenCC converters
-    logger.info("Initializing OpenCC converters...")
-    import opencc
 
-    tw_to_cn_converter = opencc.OpenCC("tw2s.json")
-    cn_to_tw_converter = opencc.OpenCC("s2twp.json")
-    # 2. Segment text and filter words
-    query_words = segment_text(
-        input_text, args.split_mode, tw_to_cn_converter, cn_to_tw_converter
-    )
-    if not query_words:
-        logger.warning("No valid words to query after segmentation. Exiting.")
-        sys.exit(0)
-    # Dictionary to hold the final markdown for each top-level query word
-    final_word_results = {}
-    with tempfile.TemporaryDirectory() as tempdir:
-        temp_path = pathlib.Path(tempdir)
-        logger.info(f"Created temporary directory for downloads: {temp_path}")
-        # --- STAGE 1: Look up segmented words ---
-        word_to_path_map_s1 = run_parallel_downloader(query_words, temp_path)
-        failed_words_s1 = []
-        logger.info("Processing initial word lookups...")
-        for word in query_words:
-            if word in word_to_path_map_s1:
-                success, md_content = extract_and_convert_html(
-                    word_to_path_map_s1[word], word
-                )
-                # Store as a list to append char results later
-                final_word_results[word] = [md_content]
-                if not success:
-                    failed_words_s1.append(word)
-            else:
-                md_content = (
-                    f"### 詞語查詢：「{word}」\n\n*（下載失敗或無對應檔案）*\n\n---"
-                )
-                final_word_results[word] = [md_content]
-                failed_words_s1.append(word)
-        # --- STAGE 2: Look up characters from failed words ---
-        if failed_words_s1:
-            logger.info(
-                f"Words without results: {', '.join(failed_words_s1)}. Falling back to character-level lookup."
-            )
-            # Collect unique characters from failed multi-character words
-            chars_to_lookup = []
-            seen_chars = set()
-            for word in failed_words_s1:
-                if len(word) > 1:
-                    for char in word:
-                        if char not in seen_chars:
-                            chars_to_lookup.append(char)
-                            seen_chars.add(char)
-            if chars_to_lookup:
-                char_to_path_map_s2 = run_parallel_downloader(
-                    chars_to_lookup, temp_path
-                )
-                char_lookup_results = {}
-                logger.info("Processing character lookups...")
-                for char in chars_to_lookup:
-                    if char in char_to_path_map_s2:
-                        _success, md_content = extract_and_convert_html(
-                            char_to_path_map_s2[char], char, is_char_lookup=True
-                        )
-                        char_lookup_results[char] = md_content
-                    else:
-                        char_lookup_results[char] = (
-                            f"#### └─ 字元查詢：「{char}」\n\n*（下載失敗或無對應檔案）*\n\n---"
-                        )
-                # Append character results to the failed word's result list
-                for word in failed_words_s1:
-                    if len(word) > 1:
-                        for char in word:
-                            if char in char_lookup_results:
-                                final_word_results[word].append(
-                                    char_lookup_results[char]
-                                )
-    # --- FINAL ASSEMBLY ---
-    # Build the final Markdown from the results dictionary
-    output_parts = [
-        "# Translation Pre-processing Document\n",
-        "## Original Input\n",
-        f"> {input_text}\n",
-        "---\n",
-        "## Dictionary Lookup Results\n",
-    ]
-    logger.info("Assembling final Markdown document...")
-    for word in query_words:  # Iterate in the original segmented order
-        if word in final_word_results:
-            # Join the main result and all sub-results (for characters)
-            full_section_md = "\n".join(final_word_results[word])
-            output_parts.append(full_section_md)
-    # Add the final LLM prompt
-    if args.prompt:
-        output_parts.append(args.prompt.strip())
-    # Output the final combined Markdown
-    final_markdown = "\n".join(output_parts)
-    if args.trim:
-        logger.info("Trimming option enabled. Processing final output...")
-        original_size = len(final_markdown.encode("utf-8"))
-        final_markdown = trim_dictionary_content(final_markdown)
-        trimmed_size = len(final_markdown.encode("utf-8"))
-        reduction = original_size - trimmed_size
-        reduction_percent = reduction / original_size * 100 if original_size > 0 else 0
-        logger.info(
-            f"Original size: {original_size:,} bytes. Trimmed size: {trimmed_size:,} bytes."
+    args = parser.parse_args()
+
+    # Read input
+    input_text = read_input(args)
+    if not input_text:
+        logger.error("Input text is empty. Exiting.")
+        sys.exit(1)
+
+    # Run appropriate path
+    if args.jieba:
+        logger.info("Running jieba segmentation mode...")
+        sections = run_jieba_path(
+            input_text,
+            args.mode,
+            args.db,
+            args.no_fallback,
+            args.max_workers,
         )
-        logger.info(f"Size reduction: {reduction:,} bytes ({reduction_percent:.2f}%).")
+    else:
+        logger.info("Running default mode (qs on whole sentence)...")
+        sections = run_default_path(
+            input_text,
+            args.mode,
+            args.db,
+            args.no_fallback,
+        )
+
+    # Assemble final document
+    final_markdown = assemble_document(input_text, sections, args.prompt)
+
+    # Output
     if args.out:
         logger.info(f"Writing output to file: {args.out}")
         try:
             args.out.write_text(final_markdown, encoding="utf-8")
-            logger.info(
-                f"Successfully wrote the final Markdown document to file at {args.out} ."
-            )
+            logger.info(f"Successfully wrote the final Markdown document to {args.out}")
         except Exception as e:
             logger.error(f"Error writing to output file {args.out}: {e}")
             sys.exit(1)
@@ -484,7 +631,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Initialize jieba. It will download the dictionary on the first run.
-    logger.info("Initializing jieba...")
-    jieba.initialize()
     main()
