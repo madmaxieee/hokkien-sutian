@@ -1,5 +1,5 @@
 {
-  "name": "artifact-viewer",
+  "name": "hokkien-sutian",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -124,6 +124,7 @@
   },
   "module": "index.ts",
   "bin": {
-    "hokkien-sutian-query": "scripts/query.ts"
+    "hokkien-sutian-query": "scripts/query.ts",
+    "hokkien_sutian_pak_penn_to_hokkien_translation_prompt_builder.py": "scripts/pak_penn_to_hokkien_split_and_sutian_prompt_builder.py"
   }
 }
