@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "loguru",
+#     "opencc",
 # ]
 # ///
 import argparse
@@ -15,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from loguru import logger
+import opencc
 
 # --- Configuration ---
 logger.remove()
@@ -29,6 +31,10 @@ DEFAULT_LLM_PROMPT = """\n---
 
 Based on the original text and the provided dictionary lookups for each word, please translate the "Original Input" from 北平方言 to hokkien （需要漢字和音標）. Use the dictionary examples to ensure the translation is natural and accurate.
 """
+
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+QUERY_SCRIPT_PATH = SCRIPT_DIR / "query.ts"
+TO_ZH_TW_CONVERTER = opencc.OpenCC("s2twp.json")
 
 # --- Core Functions ---
 
@@ -51,7 +57,8 @@ def invoke_cli(
     Returns:
         Parsed JSON dict with keys: mode, requestedMode, term, results.
     """
-    cmd = ["bun", "run", "scripts/query.ts", mode, term, "--no-pretty"]
+    query_term = TO_ZH_TW_CONVERTER.convert(term)
+    cmd = ["bun", "run", str(QUERY_SCRIPT_PATH), mode, query_term, "--no-pretty"]
     if db_path:
         cmd.extend(["--db", db_path])
     if no_fallback:
@@ -265,10 +272,9 @@ def segment_with_jieba(text: str) -> list[str]:
     try:
         import jieba
         import jieba.posseg as pseg
-        import opencc
     except ImportError:
-        logger.error("FATAL: jieba or opencc not available.")
-        logger.error("Please run: uv run --with jieba --with opencc <script> --jieba ...")
+        logger.error("FATAL: jieba not available.")
+        logger.error("Please run: uv run --with jieba <script> --jieba ...")
         sys.exit(1)
 
     logger.info("Initializing jieba...")
@@ -542,7 +548,7 @@ def main():
     parser.add_argument(
         "--jieba",
         action="store_true",
-        help="Enable jieba segmentation mode (requires: uv run --with jieba --with opencc).",
+        help="Enable jieba segmentation mode (requires: uv run --with jieba).",
     )
 
     # CLI pass-through options
