@@ -591,6 +591,11 @@ def main():
         type=pathlib.Path,
         help="Output file path. If not specified, outputs to stdout.",
     )
+    parser.add_argument(
+        "--no-use-opencc-zh_TW-version-of-original-input-in-markdown-ouptut",
+        action="store_true",
+        help="Do not convert the markdown 'Original Input' section to zh_TW via OpenCC.",
+    )
 
     args = parser.parse_args()
 
@@ -620,7 +625,12 @@ def main():
         )
 
     # Assemble final document
-    final_markdown = assemble_document(input_text, sections, args.prompt)
+    markdown_input_text = (
+        input_text
+        if args.no_use_opencc_zh_TW_version_of_original_input_in_markdown_ouptut
+        else TO_ZH_TW_CONVERTER.convert(input_text)
+    )
+    final_markdown = assemble_document(markdown_input_text, sections, args.prompt)
 
     # Output
     if args.out:
