@@ -36,6 +36,8 @@ export const SettingsModal = ({
   onForceSingleColumnChange,
   alwaysShowButtons,
   onAlwaysShowButtonsChange,
+  fallbackAutoSwitchQueryMode,
+  onFallbackAutoSwitchQueryModeChange,
   themeMode,
   onThemeModeChange,
 }: {
@@ -45,6 +47,8 @@ export const SettingsModal = ({
   onForceSingleColumnChange: (value: boolean) => void;
   alwaysShowButtons: boolean;
   onAlwaysShowButtonsChange: (value: boolean) => void;
+  fallbackAutoSwitchQueryMode: boolean;
+  onFallbackAutoSwitchQueryModeChange: (value: boolean) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (value: ThemeMode) => void;
 }) => {
@@ -79,6 +83,11 @@ export const SettingsModal = ({
               label="強制單欄顯示 (Always 1 Col)"
               checked={forceSingleColumn}
               onChange={onForceSingleColumnChange}
+            />
+            <IOStoggle
+              label="查無結果時自動切換查詢模式"
+              checked={fallbackAutoSwitchQueryMode}
+              onChange={onFallbackAutoSwitchQueryModeChange}
             />
 
             <div className="py-3">

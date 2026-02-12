@@ -29,20 +29,51 @@ The `_middleware.js` function handles canonical domain redirection:
 
 The app supports deep linking via URL query parameters:
 
-| Parameter | Mode                | Description                                             |
-| --------- | ------------------- | ------------------------------------------------------- |
-| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)       |
-| `me`      | `mandarin_example`  | Search examples by Mandarin translation                 |
-| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)      |
-| `mf`      | `mandarin_fulltext` | Full-text search in Mandarin across all fields          |
-| `rx`      | `regex`             | Regex search on entry hanzi                             |
-| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples |
-| `cat`     | `category`          | Browse by category                                      |
-| `qs`      | `multi_search`      | Sentence segmentation search                            |
-| `su`      | `single_entry`      | Direct entry lookup by ID                               |
-| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)             |
-| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                   |
-| `st`      | `phonetic`          | Phonetic search by tone (聲調)                          |
+| Parameter | Mode                | Description                                                 |
+| --------- | ------------------- | ----------------------------------------------------------- |
+| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)           |
+| `me`      | `mandarin_example`  | Search examples by Mandarin translation                     |
+| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)          |
+| `mf`      | `mandarin_fulltext` | Full-text search in Mandarin across all fields              |
+| `rx`      | `regex`             | Regex search on entry hanzi                                 |
+| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples     |
+| `cat`     | `category`          | Browse by category                                          |
+| `qs`      | `multi_search`      | Sentence segmentation search                                |
+| `su`      | `single_entry`      | Direct entry lookup by ID                                   |
+| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)                 |
+| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                       |
+| `st`      | `phonetic`          | Phonetic search by tone (聲調)                              |
+| `fa`      | `settings override` | Override fallback auto-switch query mode (`1` on / `0` off) |
+
+## Fallback Auto-Switch Query Mode
+
+Default behavior: **enabled**.
+
+When enabled, if the selected query mode returns no results, the app/CLI automatically retries with the next mode in this order:
+
+```text
+qs (= multi_search) > q/he (= hokkien_entry) > hf > me > mf > others
+```
+
+Concrete fallback sequence used by implementation:
+
+1. `multi_search` (`qs`)
+2. `hokkien_entry` (`q`, `he`)
+3. `hokkien_example` (`hf`)
+4. `mandarin_example` (`me`)
+5. `mandarin_fulltext` (`mf`)
+6. `hokkien_fulltext` (`hft`)
+7. `regex` (`rx`)
+8. `category` (`cat`)
+
+### Web app control
+
+- Settings panel toggle: **查無結果時自動切換查詢模式**
+- URL override query param: `fa`
+  - `?fa=1` → force enabled
+  - `?fa=0` → force disabled
+
+URL `fa` overrides the local settings toggle for that URL state.
 
 ## Search Modes
 
@@ -247,3 +278,28 @@ The following database tables exist but are not queried by the current implement
 - `given_names` - Given name pronunciations
 - `char_to_romanization` - Character-to-romanization mapping
 - `romanization_syllables` - Valid syllables list
+
+## CLI (`scripts/query.ts`)
+
+Run with bun:
+
+```bash
+bun scripts/query.ts --help
+```
+
+Common examples:
+
+```bash
+bun scripts/query.ts -m qs -t "逐家"
+bun scripts/query.ts -m q -t "逐家"
+bun scripts/query.ts -m me -t "運動"
+bun scripts/query.ts -m phonetic --si k --sf a --st 1
+```
+
+Fallback auto-switch query mode is enabled by default in CLI too.
+
+- Disable it with:
+
+```bash
+bun scripts/query.ts --no-fallback-auto-switch-query-mode -m q -t "逐家"
+```

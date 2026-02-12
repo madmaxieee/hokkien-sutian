@@ -1,5 +1,7 @@
 import type { SearchMode } from "./engine";
 
+export const FALLBACK_AUTO_SWITCH_QUERY_PARAM = "fa";
+
 export const QUERY_PARAM_TO_MODE = {
   q: "hokkien_entry",
   he: "hokkien_entry",
@@ -33,3 +35,20 @@ export const isQueryParamModeKey = (
 
 export const resolveModeFromQueryParamKey = (key: string): SearchMode | null =>
   isQueryParamModeKey(key) ? QUERY_PARAM_TO_MODE[key] : null;
+
+export const FALLBACK_AUTO_SWITCH_MODE_SEQUENCE: SearchMode[] = [
+  "multi_search",
+  "hokkien_entry",
+  "hokkien_example",
+  "mandarin_example",
+  "mandarin_fulltext",
+  "hokkien_fulltext",
+  "regex",
+  "category",
+];
+
+export const getFallbackAutoSwitchModes = (mode: SearchMode): SearchMode[] => {
+  const index = FALLBACK_AUTO_SWITCH_MODE_SEQUENCE.indexOf(mode);
+  if (index < 0) return [mode];
+  return FALLBACK_AUTO_SWITCH_MODE_SEQUENCE.slice(index);
+};
