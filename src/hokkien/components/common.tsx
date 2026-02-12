@@ -1,9 +1,14 @@
 import React, { useState } from "react";
 import { AlertCircle, Check, Copy, ExternalLink, Loader } from "lucide-react";
 
+import { getSuiSiannUrl } from "../urls";
+
 export const Spinner = () => (
   <div className="flex justify-center items-center p-8">
-    <Loader className="animate-spin text-blue-500 dark:text-blue-400" size={48} />
+    <Loader
+      className="animate-spin text-blue-500 dark:text-blue-400"
+      size={48}
+    />
   </div>
 );
 
@@ -55,10 +60,8 @@ export const CopyButton = ({ textToCopy }: { textToCopy: string }) => {
 };
 
 export const SuiSiannLink = ({ text }: { text: string }) => {
-  const cleanedText = text.replace(/【.*?】/g, "").trim();
-  if (!cleanedText) return null;
-
-  const url = `http://suisiann.ithuan.tw/%E8%AC%9B/${encodeURIComponent(cleanedText)}`;
+  const url = getSuiSiannUrl(text);
+  if (!url) return null;
 
   return (
     <a

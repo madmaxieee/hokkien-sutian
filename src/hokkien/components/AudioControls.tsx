@@ -1,13 +1,14 @@
 import React, { useRef } from "react";
 import { Download, Volume2 } from "lucide-react";
 
+import { getMoeAudioUrl } from "../urls";
+
 export const AudioControls = ({ entryId }: { entryId: number | null }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   if (entryId === null) return null;
 
-  const folder = Math.floor(entryId / 1000);
-  const audioUrl = `https://sutian.moe.edu.tw/media/senn/mp3/imtong/subak/${folder}/${entryId}.mp3`;
+  const audioUrl = getMoeAudioUrl(entryId);
 
   const playAudio = (e: React.MouseEvent) => {
     e.preventDefault();
