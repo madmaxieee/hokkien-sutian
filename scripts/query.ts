@@ -204,6 +204,90 @@ const quoteArg = (value: string) => {
   return `"${escaped}"`;
 };
 
+type UrlPhoneticArgs = {
+  si?: string;
+  sf?: string;
+  st?: string;
+  sm?: string;
+};
+
+const parseIthuanUrlTerm = (input: string): string | null => {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (url.hostname !== "suisiann.ithuan.tw") return null;
+
+  // Accept both encoded and decoded path forms.
+  const encodedPrefix = "/%E8%AC%9B/";
+  const decodedPrefix = "/講/";
+  const prefix = url.pathname.startsWith(encodedPrefix)
+    ? encodedPrefix
+    : url.pathname.startsWith(decodedPrefix)
+      ? decodedPrefix
+      : null;
+  if (!prefix) return null;
+
+  const rest = url.pathname.slice(prefix.length);
+  const first = rest.split("/").filter(Boolean)[0];
+  if (!first) return null;
+
+  try {
+    return decodeURIComponent(first);
+  } catch {
+    return null;
+  }
+};
+
+const parseQueryLikeInput = (
+  input: string,
+): { mode: string; term?: string; phoneticArgs?: UrlPhoneticArgs } | null => {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const tryParseQuery = (queryString: string) => {
+    const parsed = formatCliExampleFromQuery(queryString);
+    if (!parsed) return null;
+    if (parsed.mode !== "phonetic")
+      return { mode: parsed.mode, term: parsed.term };
+
+    const phoneticArgs: UrlPhoneticArgs = {};
+    const args = parsed.extraArgs ?? [];
+    for (let i = 0; i < args.length; i++) {
+      const key = args[i];
+      const value = args[i + 1];
+      if (typeof value !== "string") continue;
+      if (key === "--si") phoneticArgs.si = value;
+      if (key === "--sf") phoneticArgs.sf = value;
+      if (key === "--st") phoneticArgs.st = value;
+      if (key === "--sm") phoneticArgs.sm = value;
+    }
+    return { mode: "phonetic", phoneticArgs };
+  };
+
+  if (trimmed.startsWith("?")) {
+    return tryParseQuery(trimmed);
+  }
+
+  const qIndex = trimmed.indexOf("?");
+  if (qIndex < 0) return null;
+
+  // Accept full URLs, or any string that contains a query-string.
+  // Prefer URL parsing (so we correctly handle fragments), then fall back.
+  try {
+    const url = new URL(trimmed);
+    return tryParseQuery(url.search);
+  } catch {
+    return tryParseQuery(trimmed.slice(qIndex));
+  }
+};
+
 const formatCliArgs = (args: string[]) =>
   args.map((arg) => (arg.startsWith("-") ? arg : quoteArg(arg))).join(" ");
 
@@ -281,26 +365,69 @@ const resolveModeToken = (token: string): ResolvedMode | null => {
 const pickModeAndTerm = (
   argv: string[],
   options: { mode?: string; term?: string },
-): { modeToken: string; term: string | null; leftoverArgs: string[] } => {
+): {
+  modeToken: string;
+  term: string | null;
+  leftoverArgs: string[];
+  urlPhoneticArgs?: UrlPhoneticArgs;
+} => {
   const [a0, a1, ...rest] = argv;
 
   const explicitMode = options.mode?.toString();
   const explicitTerm = options.term?.toString();
 
+  const explicitTermNormalized = explicitTerm
+    ? (parseIthuanUrlTerm(explicitTerm) ?? explicitTerm)
+    : undefined;
+
+  // If the user passed a URL/query-string as the term, extract mode + query.
+  // This is only used when mode isn't explicitly forced.
+  const explicitTermUrl = explicitTermNormalized
+    ? parseQueryLikeInput(explicitTermNormalized)
+    : null;
+
   if (explicitMode) {
-    const term = explicitTerm ?? a0 ?? null;
+    const positional = a0 ? (parseIthuanUrlTerm(a0) ?? a0) : null;
+    const term = explicitTermNormalized ?? positional ?? null;
     return { modeToken: explicitMode, term, leftoverArgs: rest };
   }
 
+  if (explicitTermUrl) {
+    return {
+      modeToken: explicitTermUrl.mode,
+      term: explicitTermUrl.term ?? null,
+      leftoverArgs: argv,
+      urlPhoneticArgs: explicitTermUrl.phoneticArgs,
+    };
+  }
+
   if (a0) {
+    const ithuanTerm = parseIthuanUrlTerm(a0);
+    if (ithuanTerm) {
+      const leftoverArgs = [a1, ...rest].filter(Boolean) as string[];
+      return { modeToken: "qs", term: ithuanTerm, leftoverArgs };
+    }
+
+    const urlParsed = parseQueryLikeInput(a0);
+    if (urlParsed) {
+      return {
+        modeToken: urlParsed.mode,
+        term: urlParsed.term ?? null,
+        leftoverArgs: [a1, ...rest].filter(Boolean) as string[],
+        urlPhoneticArgs: urlParsed.phoneticArgs,
+      };
+    }
+
     const resolved = resolveModeToken(a0);
     if (resolved) {
-      const term = explicitTerm ?? a1 ?? null;
+      const positionalTerm = a1 ? (parseIthuanUrlTerm(a1) ?? a1) : null;
+      const term = explicitTermNormalized ?? positionalTerm ?? null;
       return { modeToken: a0, term, leftoverArgs: rest };
     }
   }
 
-  const term = explicitTerm ?? a0 ?? null;
+  const a0Normalized = a0 ? (parseIthuanUrlTerm(a0) ?? a0) : null;
+  const term = explicitTermNormalized ?? a0Normalized ?? null;
   return {
     modeToken: "qs",
     term,
@@ -482,6 +609,16 @@ const renderInkResults = async (payload: {
   const { render, Box, Text } = await import("ink");
   const h = React.createElement;
 
+  const formatInkAppEntryLinks = (items: { id: number; hanzi: string }[]) =>
+    items
+      .map((item) =>
+        makeTerminalLink(
+          getAppEntryUrl(payload.appBaseUrl, item.id),
+          item.hanzi,
+        ),
+      )
+      .join("、");
+
   const InkView = () => {
     const results = payload.results ?? [];
     const toneGroups = payload.toneGroups ?? [];
@@ -566,6 +703,23 @@ const renderInkResults = async (payload: {
                         .trim();
 
                       const examples = m.examples ?? [];
+
+                      const meaningSynonyms =
+                        r.meaning_synonyms?.get(m.id) ?? [];
+                      const meaningSynonymsSection =
+                        meaningSynonyms.length > 0
+                          ? h(
+                              Text,
+                              { dimColor: true },
+                              `近義：${formatInkAppEntryLinks(
+                                meaningSynonyms.map((syn) => ({
+                                  id: syn.entryId,
+                                  hanzi: syn.hanzi,
+                                })),
+                              )}`,
+                            )
+                          : null;
+
                       const examplesSection =
                         examples.length > 0
                           ? h(
@@ -612,11 +766,26 @@ const renderInkResults = async (payload: {
                           part,
                           explanation,
                         ),
+                        meaningSynonymsSection,
                         examplesSection,
                       );
                     }),
                   )
                 : h(Text, { dimColor: true }, "(無釋義)");
+
+            const entrySynonymsSection =
+              (r.entry_synonyms?.length ?? 0) > 0
+                ? h(
+                    Text,
+                    { dimColor: true },
+                    `近義詞: ${formatInkAppEntryLinks(
+                      (r.entry_synonyms ?? []).map((syn) => ({
+                        id: syn.id,
+                        hanzi: syn.hanzi,
+                      })),
+                    )}`,
+                  )
+                : null;
 
             const phoneticDifferencesSection =
               payload.showPhoneticDifferences && r.phonetic_differences
@@ -690,6 +859,7 @@ const renderInkResults = async (payload: {
               titleLine,
               categoryLine,
               meaningsSection,
+              entrySynonymsSection,
               phoneticDifferencesSection,
               separator,
             );
@@ -730,7 +900,9 @@ const main = async () => {
     .option("--no-download", "Don't download database; fail if not found")
     .option("--redownload", "Force re-download the database even if it exists")
     .option("--random", "Fetch a random entry")
-    .option("-p, --pretty", "Pretty-print JSON output with indentation")
+    .option("-p, --pretty", "Pretty-print JSON output with indentation", {
+      default: true,
+    })
     .option("-i, --ink", "Render results with ink (non-interactive)")
     .option("--phonetic-differences", "Show 語音差異 in ink output", {
       default: true,
@@ -770,7 +942,7 @@ const main = async () => {
   const dbPath = (options.db as string | undefined) || DEFAULT_DB_PATH;
   const allowDownload = options.download !== false;
   const forceRedownload = options.redownload === true;
-  const pretty = options.pretty === true;
+  const pretty = options.pretty !== false;
   const isInk = options.ink === true;
   const isAlfred = options.alfred === true;
   const isRandom = options.random === true;
@@ -793,92 +965,142 @@ const main = async () => {
   const resolvedDbPath = await ensureDbPath(dbPath, allowDownload, false);
 
   const db = new Database(resolvedDbPath, { readonly: true });
-  const adapter = new BunSqliteAdapter(db);
+  try {
+    const adapter = new BunSqliteAdapter(db);
 
-  const { modeToken, term, leftoverArgs } = pickModeAndTerm(args, {
-    mode: options.mode as string | undefined,
-    term: options.term as string | undefined,
-  });
-  if (leftoverArgs.length > 0) {
-    console.error(`Ignoring extra args: ${leftoverArgs.join(" ")}`);
-  }
+    const { modeToken, term, leftoverArgs, urlPhoneticArgs } = pickModeAndTerm(
+      args,
+      {
+        mode: options.mode as string | undefined,
+        term: options.term as string | undefined,
+      },
+    );
+    if (leftoverArgs.length > 0) {
+      console.error(`Ignoring extra args: ${leftoverArgs.join(" ")}`);
+    }
 
-  const resolvedMode = resolveModeToken(modeToken) ?? resolveModeToken("qs");
-  if (!resolvedMode) {
-    throw new Error(`Unsupported mode: ${modeToken}`);
-  }
+    const resolvedMode = resolveModeToken(modeToken) ?? resolveModeToken("qs");
+    if (!resolvedMode) {
+      throw new Error(`Unsupported mode: ${modeToken}`);
+    }
 
-  const mode = resolvedMode;
-  if (mode === "regex") {
-    registerRegexp(adapter);
-  }
+    const mode = resolvedMode;
+    if (mode === "regex") {
+      registerRegexp(adapter);
+    }
 
-  if (isRandom) {
-    const result = fetchRandomEntry(adapter);
-    if (isInk) {
-      await renderInkResults({
-        mode: "random",
-        results: result ? [result] : [],
-        appBaseUrl,
-        showPhoneticDifferences,
-      });
+    if (isRandom) {
+      const result = fetchRandomEntry(adapter);
+      if (isInk) {
+        await renderInkResults({
+          mode: "random",
+          results: result ? [result] : [],
+          appBaseUrl,
+          showPhoneticDifferences,
+        });
+        return;
+      }
+      if (isAlfred) {
+        const output = resultsToAlfredOutput(
+          result ? [result] : [],
+          appBaseUrl,
+        );
+        console.log(JSON.stringify(output));
+        return;
+      }
+      const indent = pretty ? 2 : 0;
+      console.log(
+        JSON.stringify({ mode: "random", result }, mapReplacer, indent),
+      );
       return;
     }
-    if (isAlfred) {
-      const output = resultsToAlfredOutput(result ? [result] : [], appBaseUrl);
-      console.log(JSON.stringify(output));
-      return;
-    }
-    console.log(JSON.stringify({ mode: "random", result }, mapReplacer, 2));
-    return;
-  }
 
-  if (mode === "phonetic") {
-    const query: PhoneticQuery = {
-      initial: (options.si as string | undefined) || null,
-      final: (options.sf as string | undefined) || null,
-      tone: options.st ? parseInt(options.st as string, 10) : null,
-      singleSyllableOnly: (options.sm as string | undefined) !== "0",
-    };
+    if (mode === "phonetic") {
+      const initialFromUrl = urlPhoneticArgs?.si;
+      const finalFromUrl = urlPhoneticArgs?.sf;
+      const toneFromUrl = urlPhoneticArgs?.st;
+      const smFromUrl = urlPhoneticArgs?.sm;
 
-    const { results, toneGroups } = performPhoneticSearch(adapter, query);
-    const payload = {
-      mode,
-      query,
-      results,
-      toneGroups,
-    };
+      const toneRaw =
+        (options.st as string | undefined) ?? toneFromUrl ?? undefined;
+      const query: PhoneticQuery = {
+        initial: (options.si as string | undefined) ?? initialFromUrl ?? null,
+        final: (options.sf as string | undefined) ?? finalFromUrl ?? null,
+        tone: toneRaw ? parseInt(toneRaw, 10) : null,
+        singleSyllableOnly:
+          ((options.sm as string | undefined) ?? smFromUrl) !== "0",
+      };
 
-    if (isInk) {
-      await renderInkResults({
+      const { results, toneGroups } = performPhoneticSearch(adapter, query);
+      const payload = {
         mode,
+        query,
         results,
         toneGroups,
-        appBaseUrl,
-        showPhoneticDifferences,
-      });
+      };
+
+      if (isInk) {
+        await renderInkResults({
+          mode,
+          results,
+          toneGroups,
+          appBaseUrl,
+          showPhoneticDifferences,
+        });
+        return;
+      }
+
+      if (isAlfred) {
+        const output = resultsToAlfredOutput(results, appBaseUrl);
+        console.log(JSON.stringify(output));
+        return;
+      }
+
+      const indent = pretty ? 2 : 0;
+      console.log(JSON.stringify(payload, mapReplacer, indent));
       return;
     }
 
-    if (isAlfred) {
-      const output = resultsToAlfredOutput(results, appBaseUrl);
-      console.log(JSON.stringify(output));
+    const termValue = term ?? "";
+
+    if (mode === "single_entry") {
+      const entryId = parseInt(termValue, 10);
+      const result = Number.isNaN(entryId)
+        ? null
+        : fetchEntryDetails(adapter, entryId);
+      const results = result ? [result] : [];
+
+      if (isInk) {
+        await renderInkResults({
+          mode,
+          term: termValue,
+          results,
+          appBaseUrl,
+          showPhoneticDifferences,
+        });
+        return;
+      }
+      if (isAlfred) {
+        const output = resultsToAlfredOutput(results, appBaseUrl);
+        console.log(JSON.stringify(output));
+        return;
+      }
+
+      const payload = { mode, term: termValue, results };
+      const indent = pretty ? 2 : 0;
+      console.log(JSON.stringify(payload, mapReplacer, indent));
       return;
     }
 
-    const indent = pretty ? 2 : 0;
-    console.log(JSON.stringify(payload, mapReplacer, indent));
-    return;
-  }
+    if (!isSearchMode(mode)) {
+      throw new Error(`Unsupported mode: ${mode}`);
+    }
 
-  const termValue = term ?? "";
+    if (!isSearchMode(mode)) {
+      throw new Error(`Unsupported mode: ${mode}`);
+    }
 
-  if (mode === "single_entry") {
-    const entryId = parseInt(termValue, 10);
-    const result = Number.isNaN(entryId)
-      ? null
-      : fetchEntryDetails(adapter, entryId);
-    const results = result ? [result] : [];
+    const results = performSearch(adapter, termValue, mode);
 
     if (isInk) {
       await renderInkResults({
@@ -890,6 +1112,7 @@ const main = async () => {
       });
       return;
     }
+
     if (isAlfred) {
       const output = resultsToAlfredOutput(results, appBaseUrl);
       console.log(JSON.stringify(output));
@@ -899,39 +1122,11 @@ const main = async () => {
     const payload = { mode, term: termValue, results };
     const indent = pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, indent));
-    return;
+  } finally {
+    // `bun:sqlite` keeps the process alive if the DB isn't closed.
+    // That breaks pipes into pagers like `less` / `bat`.
+    db.close();
   }
-
-  if (!isSearchMode(mode)) {
-    throw new Error(`Unsupported mode: ${mode}`);
-  }
-
-  if (!isSearchMode(mode)) {
-    throw new Error(`Unsupported mode: ${mode}`);
-  }
-
-  const results = performSearch(adapter, termValue, mode);
-
-  if (isInk) {
-    await renderInkResults({
-      mode,
-      term: termValue,
-      results,
-      appBaseUrl,
-      showPhoneticDifferences,
-    });
-    return;
-  }
-
-  if (isAlfred) {
-    const output = resultsToAlfredOutput(results, appBaseUrl);
-    console.log(JSON.stringify(output));
-    return;
-  }
-
-  const payload = { mode, term: termValue, results };
-  const indent = pretty ? 2 : 0;
-  console.log(JSON.stringify(payload, mapReplacer, indent));
 };
 
 const mapReplacer = (_key: string, value: unknown) => {
