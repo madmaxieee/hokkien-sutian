@@ -891,6 +891,7 @@ const main = async () => {
   cli
     .option("-m, --mode <mode>", "Search mode (default: qs / multi_search)")
     .option("-t, --term <term>", "Search term (optional)")
+    .option("-l, --limit <n>", "Max number of matched entries to return")
     .option("-d, --db <path>", `Database path (default: ${DEFAULT_DB_PATH})`)
     .option(
       "--base-url <url>",
@@ -960,6 +961,12 @@ const main = async () => {
   const showPhoneticDifferences = options.phoneticDifferences !== false;
   const fallbackAutoSwitchQueryMode =
     options.fallbackAutoSwitchQueryMode !== false;
+  const parsedLimit =
+    options.limit !== undefined ? Number(options.limit as string) : NaN;
+  const maxResults =
+    Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.floor(parsedLimit)
+      : undefined;
 
   const appBaseUrl = resolveAppBaseUrl(options);
 
@@ -1120,7 +1127,9 @@ const main = async () => {
     let effectiveMode = mode;
     let results: Result[] = [];
     for (const candidateMode of modesToTry) {
-      const candidateResults = performSearch(adapter, termValue, candidateMode);
+      const candidateResults = performSearch(adapter, termValue, candidateMode, {
+        maxResults,
+      });
       if (candidateResults.length > 0) {
         effectiveMode = candidateMode as typeof effectiveMode;
         results = candidateResults;

@@ -74,11 +74,16 @@ export const registerRegexp = (db: DBAdapter) => {
   }
 };
 
-const regexSearchFallback = (db: DBAdapter, pattern: string): Set<number> => {
+const regexSearchFallback = (
+  db: DBAdapter,
+  pattern: string,
+  maxResults?: number,
+): Set<number> => {
   const re = new RegExp(pattern);
   const entryIds = new Set<number>();
   const result = execSingle(db, "SELECT id, hanzi FROM entries");
   result.values.forEach((row) => {
+    if (maxResults && entryIds.size >= maxResults) return;
     const id = row[0] as number;
     const hanzi = row[1] as string;
     if (typeof hanzi !== "string") return;
@@ -198,6 +203,9 @@ export const performSearch = (
   db: DBAdapter,
   term: string,
   mode: SearchMode,
+  options?: {
+    maxResults?: number;
+  },
 ): Result[] => {
   if (!term.trim()) return [];
 
@@ -249,6 +257,13 @@ export const performSearch = (
 
   const trimmedTerm = term.trim();
   const likeTerm = `%${trimmedTerm}%`;
+  const rawMaxResults = options?.maxResults;
+  const maxResults =
+    typeof rawMaxResults === "number" &&
+    Number.isFinite(rawMaxResults) &&
+    rawMaxResults > 0
+      ? Math.floor(rawMaxResults)
+      : null;
   const queries: Record<SearchMode, string> = {
     hokkien_entry:
       "SELECT id FROM entries WHERE hanzi LIKE $term OR romanization LIKE $term",
@@ -270,26 +285,43 @@ export const performSearch = (
   if (!query) return [];
 
   const entryIds = new Set<number>();
+  const addEntryId = (value: unknown) => {
+    const id = value as number;
+    entryIds.add(id);
+    return maxResults !== null && entryIds.size >= maxResults;
+  };
+
+  const applyLimit = (
+    sql: string,
+    params: Record<string, SqlValue>,
+  ): QueryResult => {
+    if (maxResults === null) return execSingle(db, sql, params);
+    return execSingle(db, `${sql} LIMIT $limit`, {
+      ...params,
+      $limit: maxResults,
+    });
+  };
+
   if (mode === "regex") {
-    const params = { $term: trimmedTerm };
+    const params: Record<string, SqlValue> = { $term: trimmedTerm };
     try {
-      execSingle(db, query, params).values.forEach((row) => {
-        entryIds.add(row[0] as number);
+      applyLimit(query, params).values.forEach((row) => {
+        addEntryId(row[0]);
       });
     } catch {
       // For runtimes that can't register SQL functions (e.g., bun:sqlite 1.3.x),
       // fall back to JS filtering.
       return sortResults(
-        Array.from(regexSearchFallback(db, trimmedTerm))
+        Array.from(regexSearchFallback(db, trimmedTerm, maxResults ?? undefined))
           .map((id) => fetchEntryDetails(db, id))
           .filter(Boolean) as Result[],
         trimmedTerm,
       );
     }
   } else {
-    const params = { $term: likeTerm };
-    execSingle(db, query, params).values.forEach((row) => {
-      entryIds.add(row[0] as number);
+    const params: Record<string, SqlValue> = { $term: likeTerm };
+    applyLimit(query, params).values.forEach((row) => {
+      addEntryId(row[0]);
     });
   }
 

@@ -51,6 +51,7 @@ def invoke_cli(
     mode: str = DEFAULT_QUERY_MODE,
     db_path: str | None = None,
     no_fallback: bool = False,
+    max_results: int | None = None,
 ) -> dict[str, Any]:
     """
     Invokes the hokkien-sutian-query CLI and returns parsed JSON.
@@ -60,6 +61,7 @@ def invoke_cli(
         mode: The search mode (default: mf / mandarin_fulltext).
         db_path: Optional database path.
         no_fallback: Disable CLI fallback auto-switch.
+        max_results: Optional max results passed to CLI SQL-level limiter.
 
     Returns:
         Parsed JSON dict with keys: mode, requestedMode, term, results.
@@ -70,6 +72,8 @@ def invoke_cli(
         cmd.extend(["--db", db_path])
     if no_fallback:
         cmd.append("--no-fallback-auto-switch-query-mode")
+    if isinstance(max_results, int) and max_results > 0:
+        cmd.extend(["--limit", str(max_results)])
 
     logger.debug(f"Invoking CLI: {' '.join(cmd)}")
     try:
@@ -338,6 +342,7 @@ def query_all_jieba(
     db_path: str | None,
     no_fallback: bool,
     max_workers: int,
+    max_results_per_word: int,
 ) -> dict[str, dict[str, Any]]:
     """
     Queries all words in parallel using ThreadPoolExecutor.
@@ -348,6 +353,7 @@ def query_all_jieba(
         db_path: Optional database path.
         no_fallback: Disable fallback auto-switch.
         max_workers: Max parallel workers.
+        max_results_per_word: Max results passed to query.ts --limit.
 
     Returns:
         Dict mapping word -> CLI response dict.
@@ -359,7 +365,14 @@ def query_all_jieba(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_word = {
-            executor.submit(invoke_cli, word, mode, db_path, no_fallback): word
+            executor.submit(
+                invoke_cli,
+                word,
+                mode,
+                db_path,
+                no_fallback,
+                max_results_per_word,
+            ): word
             for word in words
         }
 
@@ -393,8 +406,8 @@ def is_queryable_word(word: str) -> bool:
     cleaned = strip_cjk_punctuation(word).strip()
     if not cleaned:
         return False
-    # Keep only tokens with Hanzi/Latin/digits, drop emoji/symbol-only tokens.
-    if not re.search(r"[\u4E00-\u9FFFa-zA-Z0-9]", cleaned):
+    # Query only tokens containing Chinese characters.
+    if not re.search(r"[\u4E00-\u9FFF]", cleaned):
         return False
     return True
 
@@ -542,7 +555,14 @@ def run_jieba_path(
         return []
 
     # Query all words in parallel
-    word_results = query_all_jieba(words, mode, db_path, no_fallback, max_workers)
+    word_results = query_all_jieba(
+        words,
+        mode,
+        db_path,
+        no_fallback,
+        max_workers,
+        max_results_per_word,
+    )
 
     sections = []
     failed_words = []
@@ -590,7 +610,12 @@ def run_jieba_path(
                 f"Looking up {len(chars_to_lookup)} characters: {', '.join(chars_to_lookup)}"
             )
             char_results = query_all_jieba(
-                chars_to_lookup, mode, db_path, no_fallback, max_workers
+                chars_to_lookup,
+                mode,
+                db_path,
+                no_fallback,
+                max_workers,
+                max_results_per_word,
             )
 
             # Build a map of character -> results for easy lookup
