@@ -15,7 +15,7 @@ import {
   fetchEntryDetails,
   fetchRandomEntry,
   performPhoneticSearch,
-  performSearch,
+  performSearchWithMeta,
   registerRegexp,
 } from "../src/hokkien/engine";
 import type { SearchMode } from "../src/hokkien/engine";
@@ -605,6 +605,8 @@ const renderInkResults = async (payload: {
   term?: string | null;
   results?: Result[];
   toneGroups?: ToneGroup[];
+  truncated?: boolean;
+  limit?: number | null;
   appBaseUrl: string;
   showPhoneticDifferences: boolean;
 }) => {
@@ -632,6 +634,14 @@ const renderInkResults = async (payload: {
       term: payload.term,
     });
     const header = h(Text, { bold: true }, linkOrText(headerUrl, headerText));
+    const truncationNotice =
+      payload.truncated && payload.limit
+        ? h(
+            Text,
+            { color: "yellow" },
+            `結果已截斷：目前僅顯示前 ${payload.limit} 筆。`,
+          )
+        : null;
 
     const toneGroupSection =
       toneGroups.length > 0
@@ -872,6 +882,7 @@ const renderInkResults = async (payload: {
       Box,
       { flexDirection: "column" },
       header,
+      truncationNotice,
       toneGroupSection,
       resultsSection,
     );
@@ -1023,6 +1034,8 @@ const main = async () => {
         await renderInkResults({
           mode: "random",
           results: result ? [result] : [],
+          truncated: false,
+          limit: null,
           appBaseUrl,
           showPhoneticDifferences,
         });
@@ -1065,6 +1078,8 @@ const main = async () => {
         query,
         results,
         toneGroups,
+        truncated: false,
+        limit: null,
       };
 
       if (isInk) {
@@ -1072,6 +1087,8 @@ const main = async () => {
           mode,
           results,
           toneGroups,
+          truncated: false,
+          limit: null,
           appBaseUrl,
           showPhoneticDifferences,
         });
@@ -1134,8 +1151,9 @@ const main = async () => {
 
     let effectiveMode = mode;
     let results: Result[] = [];
+    let truncated = false;
     for (const candidateMode of modesToTry) {
-      const candidateResults = performSearch(
+      const candidateSearch = performSearchWithMeta(
         adapter,
         termValue,
         candidateMode,
@@ -1143,13 +1161,16 @@ const main = async () => {
           maxResults,
         },
       );
+      const candidateResults = candidateSearch.results;
       if (candidateResults.length > 0) {
         effectiveMode = candidateMode as typeof effectiveMode;
         results = candidateResults;
+        truncated = candidateSearch.truncated;
         break;
       }
       if (candidateMode === mode) {
         results = candidateResults;
+        truncated = candidateSearch.truncated;
       }
     }
 
@@ -1158,6 +1179,8 @@ const main = async () => {
         mode: effectiveMode,
         term: termValue,
         results,
+        truncated,
+        limit: maxResults ?? null,
         appBaseUrl,
         showPhoneticDifferences,
       });
@@ -1175,6 +1198,8 @@ const main = async () => {
       requestedMode: mode,
       term: termValue,
       results,
+      truncated,
+      limit: maxResults ?? null,
     };
     const indent = pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, indent));
