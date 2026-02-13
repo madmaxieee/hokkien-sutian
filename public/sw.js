@@ -1,30 +1,11 @@
-const CACHE_NAME = 'hokkien-dict-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/favicon.ico',
-  '/icon-64.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/manifest.json'
-];
+const CACHE_NAME = 'hokkien-dict-v2';
 
-const DATABASE_ASSETS = [
-  '/assets/data/kautian.db',
-  '/sql-wasm.wasm'
-];
-
-// Install event - cache static assets
+// Install - skip waiting to activate immediately
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// Activate - clean up old caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -38,26 +19,22 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - cache strategy
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // For database and WASM files - cache first, then network
-  if (DATABASE_ASSETS.some(asset => url.pathname.endsWith(asset))) {
+  // Only handle same-origin requests
+  if (url.origin !== location.origin) return;
+
+  // Database and WASM - cache first, no background update
+  if (url.pathname === '/assets/data/kautian.db' || url.pathname === '/sql-wasm.wasm') {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) => {
         return cache.match(request).then((cachedResponse) => {
           if (cachedResponse) {
-            // Fetch in background to update cache
-            fetch(request).then((networkResponse) => {
-              if (networkResponse.ok) {
-                cache.put(request, networkResponse.clone());
-              }
-            }).catch(() => {});
-            return cachedResponse;
+            return cachedResponse; // Return cached, no network request
           }
-          // Not in cache, fetch from network
           return fetch(request).then((networkResponse) => {
             if (networkResponse.ok) {
               cache.put(request, networkResponse.clone());
@@ -70,39 +47,56 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets - cache only
-  if (STATIC_ASSETS.some(asset => url.pathname === asset || url.pathname.endsWith(asset))) {
+  // JS/CSS bundles with hashes - cache first (immutable)
+  if (url.pathname.match(/\/assets\/.*-[a-f0-9]{8,}\.(js|css)$/)) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(request).then((networkResponse) => {
-          if (networkResponse.ok) {
-            return caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, networkResponse.clone());
-              return networkResponse;
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, response.clone());
             });
           }
-          return networkResponse;
+          return response;
         });
       })
     );
     return;
   }
 
-  // For other requests - network first, fallback to cache
-  event.respondWith(
-    fetch(request).then((networkResponse) => {
-      if (networkResponse.ok) {
-        return caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, networkResponse.clone());
-          return networkResponse;
+  // HTML - network first, cache fallback
+  if (url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response.ok) {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, response.clone());
+          });
+        }
+        return response;
+      }).catch(() => {
+        return caches.match(request);
+      })
+    );
+    return;
+  }
+
+  // Static assets (icons, manifest) - cache first
+  if (url.pathname.match(/\/(favicon\.ico|icon-.*\.png|manifest\.json)$/)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, response.clone());
+            });
+          }
+          return response;
         });
-      }
-      throw new Error('Network response not ok');
-    }).catch(() => {
-      return caches.match(request);
-    })
-  );
+      })
+    );
+    return;
+  }
 });

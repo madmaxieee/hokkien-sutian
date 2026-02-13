@@ -1,15 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { viteSingleFile } from "vite-plugin-singlefile";
-import { viteStaticCopy } from "vite-plugin-static-copy"; // Import the plugin
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    viteSingleFile(),
-    // Add the static copy plugin
     viteStaticCopy({
       targets: [
         {
@@ -17,7 +14,6 @@ export default defineConfig({
           dest: ".", // Copy to the root of the output directory
         },
         {
-          // Add this line for sql.js 1.14.0+
           src: "node_modules/sql.js/dist/sql-wasm-browser.wasm",
           dest: "assets",
         },
@@ -30,6 +26,16 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       src: path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          sqljs: ['sql.js'],
+        },
+      },
     },
   },
 });
