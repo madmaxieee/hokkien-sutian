@@ -120,10 +120,8 @@ const HokkienDictionary = () => {
     searchResultLimitEnabledOverride,
     setSearchResultLimitEnabledOverride,
   ] = useState<boolean | null>(null);
-  const [
-    searchResultLimitValueOverride,
-    setSearchResultLimitValueOverride,
-  ] = useState<number | null>(null);
+  const [searchResultLimitValueOverride, setSearchResultLimitValueOverride] =
+    useState<number | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -353,9 +351,7 @@ const HokkienDictionary = () => {
             term,
             candidateMode,
             {
-              maxResults: shouldApplyLimit
-                ? effectiveLimitValue
-                : undefined,
+              maxResults: shouldApplyLimit ? effectiveLimitValue : undefined,
             },
           );
           const candidateResults = candidateSearch.results;
@@ -529,7 +525,8 @@ const HokkienDictionary = () => {
       const trimmedTerm = searchTerm.trim();
       if (!trimmedTerm) return;
 
-      const queryKey = modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
+      const queryKey =
+        modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
       const params = new URLSearchParams(window.location.search);
       for (const key of Object.keys(queryKeyToMode)) {
         params.delete(key);
@@ -622,7 +619,8 @@ const HokkienDictionary = () => {
       );
       const parsedLimitValueOverride = Number(limitValueOverrideRaw);
       const limitValueOverride =
-        Number.isFinite(parsedLimitValueOverride) && parsedLimitValueOverride > 0
+        Number.isFinite(parsedLimitValueOverride) &&
+        parsedLimitValueOverride > 0
           ? Math.floor(parsedLimitValueOverride)
           : null;
       setSearchResultLimitValueOverride(limitValueOverride);
@@ -1070,13 +1068,16 @@ const HokkienDictionary = () => {
           !isPhoneticSearch &&
           !isSingleEntryView && (
             <div className="max-w-4xl mx-auto mb-4 rounded-md border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-              <span>結果已截斷：目前僅顯示前 {searchResultLimitValue} 筆。 </span>
+              <span>
+                結果已截斷：目前僅顯示前 {searchResultLimitValue} 筆。{" "}
+              </span>
               <a
                 href="#"
                 onClick={handleRetryWithoutLimit}
                 className="underline underline-offset-2 hover:opacity-80"
               >
-                重新查詢（不限制筆數）
+                重新查詢（不限制筆數, this may crash browser if results are too
+                large）
               </a>
             </div>
           )}

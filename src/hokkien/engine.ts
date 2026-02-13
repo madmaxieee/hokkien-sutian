@@ -313,8 +313,8 @@ export const performSearchWithMeta = (
 
     return {
       results: Array.from(foundResults.values())
-      .sort((a, b) => b.termLength - a.termLength)
-      .flatMap((item) => item.results),
+        .sort((a, b) => b.termLength - a.termLength)
+        .flatMap((item) => item.results),
       truncated: false,
     };
   }
@@ -373,7 +373,11 @@ export const performSearchWithMeta = (
     } catch {
       // For runtimes that can't register SQL functions (e.g., bun:sqlite 1.3.x),
       // fall back to JS filtering.
-      const fallback = regexSearchFallback(db, trimmedTerm, maxResults ?? undefined);
+      const fallback = regexSearchFallback(
+        db,
+        trimmedTerm,
+        maxResults ?? undefined,
+      );
       const fallbackResults = sortResults(
         Array.from(fallback.entryIds)
           .map((id) => fetchEntryDetails(db, id))

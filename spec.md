@@ -29,23 +29,23 @@ The `_middleware.js` function handles canonical domain redirection:
 
 The app supports deep linking via URL query parameters:
 
-| Parameter | Mode                | Description                                                 |
-| --------- | ------------------- | ----------------------------------------------------------- |
-| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)           |
-| `me`      | `mandarin_example`  | Search examples by Mandarin translation                     |
-| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)          |
+| Parameter | Mode                | Description                                                             |
+| --------- | ------------------- | ----------------------------------------------------------------------- |
+| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)                       |
+| `me`      | `mandarin_example`  | Search examples by Mandarin translation                                 |
+| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)                      |
 | `mf`      | `mandarin_fulltext` | Full-text search in 北平方言 fields (exact/prefix matches ranked first) |
-| `rx`      | `regex`             | Regex search on entry hanzi                                 |
-| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples     |
-| `cat`     | `category`          | Browse by category                                          |
-| `qs`      | `multi_search`      | Sentence segmentation search                                |
-| `su`      | `single_entry`      | Direct entry lookup by ID                                   |
-| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)                 |
-| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                       |
-| `st`      | `phonetic`          | Phonetic search by tone (聲調)                              |
-| `fa`      | `settings override` | Override fallback auto-switch query mode (`1` on / `0` off) |
-| `le`      | `settings override` | Override result-limit enabled (`1` on / `0` off)            |
-| `lv`      | `settings override` | Override result-limit value (positive integer)              |
+| `rx`      | `regex`             | Regex search on entry hanzi                                             |
+| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples                 |
+| `cat`     | `category`          | Browse by category                                                      |
+| `qs`      | `multi_search`      | Sentence segmentation search                                            |
+| `su`      | `single_entry`      | Direct entry lookup by ID                                               |
+| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)                             |
+| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                                   |
+| `st`      | `phonetic`          | Phonetic search by tone (聲調)                                          |
+| `fa`      | `settings override` | Override fallback auto-switch query mode (`1` on / `0` off)             |
+| `le`      | `settings override` | Override result-limit enabled (`1` on / `0` off)                        |
+| `lv`      | `settings override` | Override result-limit value (positive integer)                          |
 
 ## Fallback Auto-Switch Query Mode
 
