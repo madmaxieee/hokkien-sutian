@@ -16,6 +16,11 @@ export default defineConfig({
           src: "node_modules/sql.js/dist/sql-wasm.wasm",
           dest: ".", // Copy to the root of the output directory
         },
+        {
+          // Add this line for sql.js 1.14.0+
+          src: "node_modules/sql.js/dist/sql-wasm-browser.wasm",
+          dest: "assets",
+        },
       ],
     }),
   ],

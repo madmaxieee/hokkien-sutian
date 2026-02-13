@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import initSqlJs from "sql.js";
+import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import {
   HelpCircle,
   Info,
@@ -698,13 +699,7 @@ const HokkienDictionary = () => {
     const loadDb = async () => {
       try {
         const SQL = await initSqlJs({
-          locateFile: (file) => {
-            if (typeof window === "undefined") return "sql-wasm.wasm";
-            if (file.endsWith(".wasm")) {
-              return `${window.location.origin}/sql-wasm.wasm`;
-            }
-            return `${window.location.origin}/${file}`;
-          },
+          locateFile: () => sqlWasmUrl,
         });
         const response = await fetch("/assets/data/kautian.db");
         if (!response.ok) {
