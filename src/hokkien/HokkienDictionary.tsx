@@ -25,7 +25,7 @@ import {
   fetchEntryDetails,
   fetchRandomEntry,
   performPhoneticSearch,
-  performSearch,
+  performSearchWithMeta,
   registerRegexp,
 } from "./engine";
 import type { SearchMode } from "./engine";
@@ -38,6 +38,8 @@ import {
   FALLBACK_AUTO_SWITCH_QUERY_PARAM,
   MODE_TO_QUERY_PARAM,
   QUERY_PARAM_TO_MODE,
+  SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM,
+  SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM,
   getFallbackAutoSwitchModes,
 } from "./queryParams";
 import { CategoryModal } from "./modals/CategoryModal";
@@ -50,6 +52,11 @@ import modeHelpText from "../../data/mode-help.jsonc?raw";
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 const FALLBACK_AUTO_SWITCH_STORAGE_KEY =
   "hokkien-sutian:fallback-auto-switch-query-mode";
+const SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY =
+  "hokkien-sutian:search-result-limit-enabled";
+const SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY =
+  "hokkien-sutian:search-result-limit-value";
+const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 
 type ModeHelpExampleLink = {
   url: string;
@@ -81,6 +88,7 @@ type ModeHelpFile = {
 const HokkienDictionary = () => {
   const [db, setDb] = useState<DBAdapter | null>(null);
   const [results, setResults] = useState<Result[]>([]);
+  const [searchWasTruncated, setSearchWasTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +116,12 @@ const HokkienDictionary = () => {
     fallbackAutoSwitchQueryModeOverride,
     setFallbackAutoSwitchQueryModeOverride,
   ] = useState<boolean | null>(null);
+  const [
+    searchResultLimitEnabledOverride,
+    setSearchResultLimitEnabledOverride,
+  ] = useState<boolean | null>(null);
+  const [searchResultLimitValueOverride, setSearchResultLimitValueOverride] =
+    useState<number | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -118,6 +132,27 @@ const HokkienDictionary = () => {
   const [isSingleEntryView, setIsSingleEntryView] = useState(false);
   const [toneGroups, setToneGroups] = useState<ToneGroup[]>([]);
   const [isPhoneticSearch, setIsPhoneticSearch] = useState(false);
+  const [searchResultLimitEnabled, setSearchResultLimitEnabled] =
+    useState<boolean>(() => {
+      if (typeof window === "undefined") return true;
+      const saved = window.localStorage.getItem(
+        SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY,
+      );
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+      return true;
+    });
+  const [searchResultLimitValue, setSearchResultLimitValue] = useState<number>(
+    () => {
+      if (typeof window === "undefined") return DEFAULT_SEARCH_RESULT_LIMIT;
+      const saved = Number(
+        window.localStorage.getItem(SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY),
+      );
+      return Number.isFinite(saved) && saved > 0
+        ? Math.floor(saved)
+        : DEFAULT_SEARCH_RESULT_LIMIT;
+    },
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -139,6 +174,22 @@ const HokkienDictionary = () => {
       // Ignore storage errors (private mode, disabled storage, etc.)
     }
   }, [fallbackAutoSwitchQueryMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY,
+        searchResultLimitEnabled ? "1" : "0",
+      );
+      window.localStorage.setItem(
+        SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY,
+        String(searchResultLimitValue),
+      );
+    } catch {
+      // Ignore storage errors (private mode, disabled storage, etc.)
+    }
+  }, [searchResultLimitEnabled, searchResultLimitValue]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -178,6 +229,57 @@ const HokkienDictionary = () => {
     [fallbackAutoSwitchQueryMode, fallbackAutoSwitchQueryModeOverride],
   );
 
+  const getEffectiveSearchLimitEnabled = useCallback(
+    (override?: boolean) =>
+      override ?? searchResultLimitEnabledOverride ?? searchResultLimitEnabled,
+    [searchResultLimitEnabled, searchResultLimitEnabledOverride],
+  );
+
+  const getEffectiveSearchLimitValue = useCallback(
+    (override?: number) =>
+      override ?? searchResultLimitValueOverride ?? searchResultLimitValue,
+    [searchResultLimitValue, searchResultLimitValueOverride],
+  );
+
+  const applyUrlRuntimeSettings = useCallback(
+    (
+      params: URLSearchParams,
+      options?: {
+        fallbackOverride?: boolean | null;
+        limitEnabledOverride?: boolean;
+        limitValueOverride?: number;
+      },
+    ) => {
+      const fallbackOverrideResolved =
+        options?.fallbackOverride ?? fallbackAutoSwitchQueryModeOverride;
+      if (fallbackOverrideResolved === null) {
+        params.delete(FALLBACK_AUTO_SWITCH_QUERY_PARAM);
+      } else {
+        params.set(
+          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
+          fallbackOverrideResolved ? "1" : "0",
+        );
+      }
+
+      const limitEnabled = getEffectiveSearchLimitEnabled(
+        options?.limitEnabledOverride,
+      );
+      const limitValue = getEffectiveSearchLimitValue(
+        options?.limitValueOverride,
+      );
+      params.set(
+        SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM,
+        limitEnabled ? "1" : "0",
+      );
+      params.set(SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM, String(limitValue));
+    },
+    [
+      fallbackAutoSwitchQueryModeOverride,
+      getEffectiveSearchLimitEnabled,
+      getEffectiveSearchLimitValue,
+    ],
+  );
+
   const updateUrlModeAndTerm = useCallback(
     (mode: string, term: string) => {
       if (typeof window === "undefined") return;
@@ -189,12 +291,7 @@ const HokkienDictionary = () => {
         params.delete(key);
       }
       params.set(queryKey, term);
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
 
       const query = params.toString();
       const newUrl = query
@@ -202,28 +299,40 @@ const HokkienDictionary = () => {
         : window.location.pathname;
       window.history.replaceState({ path: newUrl }, "", newUrl);
     },
-    [fallbackAutoSwitchQueryModeOverride, modeToQueryKey, queryKeyToMode],
+    [applyUrlRuntimeSettings, modeToQueryKey, queryKeyToMode],
   );
 
   const runSearch = useCallback(
     (
       term: string,
       mode: string,
-      options?: { fallbackAutoSwitchOverride?: boolean | null },
+      options?: {
+        fallbackAutoSwitchOverride?: boolean | null;
+        limitEnabledOverride?: boolean;
+        limitValueOverride?: number;
+      },
     ) => {
       if (!db || !term.trim()) {
         setResults([]);
+        setSearchWasTruncated(false);
         return;
       }
 
       setSearching(true);
       setResults([]);
+      setSearchWasTruncated(false);
       setToneGroups([]);
       setIsPhoneticSearch(false);
       setError(null);
 
       try {
         const modeToTry = mode as SearchMode;
+        const shouldApplyLimit = getEffectiveSearchLimitEnabled(
+          options?.limitEnabledOverride,
+        );
+        const effectiveLimitValue = getEffectiveSearchLimitValue(
+          options?.limitValueOverride,
+        );
         const shouldFallbackAutoSwitch = getEffectiveFallbackAutoSwitchEnabled(
           options?.fallbackAutoSwitchOverride,
         );
@@ -234,21 +343,33 @@ const HokkienDictionary = () => {
 
         let chosenMode = modeToTry;
         let finalResults: Result[] = [];
+        let finalWasTruncated = false;
 
         for (const candidateMode of fallbackModes) {
-          const candidateResults = performSearch(db, term, candidateMode);
+          const candidateSearch = performSearchWithMeta(
+            db,
+            term,
+            candidateMode,
+            {
+              maxResults: shouldApplyLimit ? effectiveLimitValue : undefined,
+            },
+          );
+          const candidateResults = candidateSearch.results;
           if (candidateResults.length > 0) {
             chosenMode = candidateMode;
             finalResults = candidateResults;
+            finalWasTruncated = candidateSearch.truncated;
             break;
           }
 
           if (candidateMode === modeToTry) {
             finalResults = candidateResults;
+            finalWasTruncated = candidateSearch.truncated;
           }
         }
 
         setResults(finalResults);
+        setSearchWasTruncated(finalWasTruncated);
         if (chosenMode !== modeToTry) {
           setSearchMode(chosenMode);
           updateUrlModeAndTerm(chosenMode, term.trim());
@@ -260,7 +381,13 @@ const HokkienDictionary = () => {
         setSearching(false);
       }
     },
-    [db, getEffectiveFallbackAutoSwitchEnabled, updateUrlModeAndTerm],
+    [
+      db,
+      getEffectiveFallbackAutoSwitchEnabled,
+      getEffectiveSearchLimitEnabled,
+      getEffectiveSearchLimitValue,
+      updateUrlModeAndTerm,
+    ],
   );
 
   const handleRandomWord = useCallback(() => {
@@ -269,6 +396,7 @@ const HokkienDictionary = () => {
     setIsPhoneticSearch(false);
     setToneGroups([]);
     setIsSingleEntryView(false);
+    setSearchWasTruncated(false);
     setSearching(true);
 
     const result = fetchRandomEntry(db);
@@ -279,18 +407,13 @@ const HokkienDictionary = () => {
 
       const params = new URLSearchParams();
       params.set("q", result.hanzi);
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
     }
 
     setSearching(false);
-  }, [db, fallbackAutoSwitchQueryModeOverride]);
+  }, [applyUrlRuntimeSettings, db]);
 
   const handleCategorySelect = useCallback(
     (category: string) => {
@@ -303,18 +426,13 @@ const HokkienDictionary = () => {
 
       const params = new URLSearchParams();
       params.set("cat", category);
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
       runSearch(category, "category", { fallbackAutoSwitchOverride: false });
     },
-    [fallbackAutoSwitchQueryModeOverride, runSearch],
+    [applyUrlRuntimeSettings, runSearch],
   );
 
   const handleCategoryClick = useCallback(
@@ -327,18 +445,13 @@ const HokkienDictionary = () => {
 
       const params = new URLSearchParams();
       params.set("cat", category);
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
       runSearch(category, "category", { fallbackAutoSwitchOverride: false });
     },
-    [fallbackAutoSwitchQueryModeOverride, runSearch],
+    [applyUrlRuntimeSettings, runSearch],
   );
 
   const handlePhoneticSearch = useCallback(
@@ -348,6 +461,7 @@ const HokkienDictionary = () => {
       setIsSingleEntryView(false);
       setSearching(true);
       setResults([]);
+      setSearchWasTruncated(false);
       setToneGroups([]);
       setIsPhoneticSearch(true);
       setError(null);
@@ -375,12 +489,7 @@ const HokkienDictionary = () => {
         if (query.final) params.set("sf", query.final);
         if (query.tone) params.set("st", query.tone.toString());
         if (!query.singleSyllableOnly) params.set("sm", "0");
-        if (fallbackAutoSwitchQueryModeOverride !== null) {
-          params.set(
-            FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-            fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-          );
-        }
+        applyUrlRuntimeSettings(params);
         const newUrl = `${window.location.pathname}?${params.toString()}`;
         window.history.pushState({ path: newUrl }, "", newUrl);
       } catch (err) {
@@ -390,7 +499,7 @@ const HokkienDictionary = () => {
         setSearching(false);
       }
     },
-    [db, fallbackAutoSwitchQueryModeOverride],
+    [applyUrlRuntimeSettings, db],
   );
 
   const handleSearchModeChange = (newMode: string) => {
@@ -403,29 +512,54 @@ const HokkienDictionary = () => {
       const queryKey = modeToQueryKey[newMode as keyof typeof modeToQueryKey];
       const params = new URLSearchParams();
       params.set(queryKey, trimmedSearchTerm);
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
       runSearch(trimmedSearchTerm, newMode);
     }
   };
 
+  const handleRetryWithoutLimit = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      e.preventDefault();
+      const trimmedTerm = searchTerm.trim();
+      if (!trimmedTerm) return;
+
+      const queryKey =
+        modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
+      const params = new URLSearchParams(window.location.search);
+      for (const key of Object.keys(queryKeyToMode)) {
+        params.delete(key);
+      }
+      params.set(queryKey, trimmedTerm);
+      applyUrlRuntimeSettings(params, {
+        limitEnabledOverride: false,
+      });
+      const url = `${window.location.pathname}?${params.toString()}`;
+      window.history.pushState({ path: url }, "", url);
+
+      setSearchResultLimitEnabledOverride(false);
+      runSearch(trimmedTerm, searchMode, {
+        limitEnabledOverride: false,
+      });
+    },
+    [
+      applyUrlRuntimeSettings,
+      modeToQueryKey,
+      queryKeyToMode,
+      runSearch,
+      searchMode,
+      searchTerm,
+    ],
+  );
+
   const handlePermalinkClick = useCallback(
     (id: number) => {
       if (!db) return;
+      setSearchWasTruncated(false);
       const params = new URLSearchParams();
       params.set("su", String(id));
-      if (fallbackAutoSwitchQueryModeOverride !== null) {
-        params.set(
-          FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-          fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-        );
-      }
+      applyUrlRuntimeSettings(params);
       const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
 
@@ -435,11 +569,12 @@ const HokkienDictionary = () => {
       const result = fetchEntryDetails(db, id);
       setResults(result ? [result] : []);
     },
-    [db, fallbackAutoSwitchQueryModeOverride],
+    [applyUrlRuntimeSettings, db],
   );
 
   const handleTitleClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    setSearchWasTruncated(false);
     setIsSingleEntryView(false);
     setIsPhoneticSearch(false);
     setToneGroups([]);
@@ -447,12 +582,7 @@ const HokkienDictionary = () => {
     setSearchTerm("");
     setSearchMode("hokkien_entry");
     const params = new URLSearchParams();
-    if (fallbackAutoSwitchQueryModeOverride !== null) {
-      params.set(
-        FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-        fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-      );
-    }
+    applyUrlRuntimeSettings(params);
     const query = params.toString();
     const newUrl = query
       ? `${window.location.pathname}?${query}`
@@ -464,9 +594,41 @@ const HokkienDictionary = () => {
     (locationSearch: string) => {
       const params = new URLSearchParams(locationSearch);
 
+      const fallbackOverrideRaw = params.get(FALLBACK_AUTO_SWITCH_QUERY_PARAM);
+      const fallbackOverride =
+        fallbackOverrideRaw === "1"
+          ? true
+          : fallbackOverrideRaw === "0"
+            ? false
+            : null;
+      setFallbackAutoSwitchQueryModeOverride(fallbackOverride);
+
+      const limitEnabledOverrideRaw = params.get(
+        SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM,
+      );
+      const limitEnabledOverride =
+        limitEnabledOverrideRaw === "1"
+          ? true
+          : limitEnabledOverrideRaw === "0"
+            ? false
+            : null;
+      setSearchResultLimitEnabledOverride(limitEnabledOverride);
+
+      const limitValueOverrideRaw = params.get(
+        SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM,
+      );
+      const parsedLimitValueOverride = Number(limitValueOverrideRaw);
+      const limitValueOverride =
+        Number.isFinite(parsedLimitValueOverride) &&
+        parsedLimitValueOverride > 0
+          ? Math.floor(parsedLimitValueOverride)
+          : null;
+      setSearchResultLimitValueOverride(limitValueOverride);
+
       if (params.has("su")) {
         setIsSingleEntryView(true);
         setIsPhoneticSearch(false);
+        setSearchWasTruncated(false);
         setToneGroups([]);
         setSearching(true);
 
@@ -480,16 +642,8 @@ const HokkienDictionary = () => {
         return;
       }
 
-      const fallbackOverrideRaw = params.get(FALLBACK_AUTO_SWITCH_QUERY_PARAM);
-      const fallbackOverride =
-        fallbackOverrideRaw === "1"
-          ? true
-          : fallbackOverrideRaw === "0"
-            ? false
-            : null;
-      setFallbackAutoSwitchQueryModeOverride(fallbackOverride);
-
       if (params.has("si") || params.has("sf") || params.has("st")) {
+        setSearchWasTruncated(false);
         const query: PhoneticQuery = {
           initial: params.get("si"),
           final: params.get("sf"),
@@ -519,9 +673,12 @@ const HokkienDictionary = () => {
       if (initialTerm) {
         runSearch(initialTerm, initialMode, {
           fallbackAutoSwitchOverride: fallbackOverride,
+          limitEnabledOverride: limitEnabledOverride ?? undefined,
+          limitValueOverride: limitValueOverride ?? undefined,
         });
       } else {
         setResults([]);
+        setSearchWasTruncated(false);
       }
     },
     [db, handlePhoneticSearch, queryKeyToMode, runSearch],
@@ -671,12 +828,7 @@ const HokkienDictionary = () => {
     const queryKey = modeToQueryKey[searchMode as keyof typeof modeToQueryKey];
     const params = new URLSearchParams();
     if (termToSearch) params.set(queryKey, termToSearch);
-    if (fallbackAutoSwitchQueryModeOverride !== null) {
-      params.set(
-        FALLBACK_AUTO_SWITCH_QUERY_PARAM,
-        fallbackAutoSwitchQueryModeOverride ? "1" : "0",
-      );
-    }
+    applyUrlRuntimeSettings(params);
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
     runSearch(termToSearch, searchMode);
@@ -729,11 +881,13 @@ const HokkienDictionary = () => {
       // Close the help dialog first so the UI feels responsive.
       setActiveModeHelp(null);
 
-      const newUrl = `${window.location.pathname}${example}`;
+      const params = new URLSearchParams(example);
+      applyUrlRuntimeSettings(params);
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({ path: newUrl }, "", newUrl);
-      syncStateWithUrl(example);
+      syncStateWithUrl(`?${params.toString()}`);
     },
-    [syncStateWithUrl],
+    [applyUrlRuntimeSettings, syncStateWithUrl],
   );
 
   if (loading) {
@@ -833,17 +987,16 @@ const HokkienDictionary = () => {
                           prev === "phonetic" ? "hokkien_entry" : prev,
                         );
 
+                        const params = new URLSearchParams();
+                        applyUrlRuntimeSettings(params);
+                        const query = params.toString();
+                        const clearedUrl = query
+                          ? `${window.location.pathname}?${query}`
+                          : window.location.pathname;
                         window.history.pushState(
-                          {
-                            path:
-                              fallbackAutoSwitchQueryModeOverride === null
-                                ? window.location.pathname
-                                : `${window.location.pathname}?${FALLBACK_AUTO_SWITCH_QUERY_PARAM}=${fallbackAutoSwitchQueryModeOverride ? "1" : "0"}`,
-                          },
+                          { path: clearedUrl },
                           "",
-                          fallbackAutoSwitchQueryModeOverride === null
-                            ? window.location.pathname
-                            : `${window.location.pathname}?${FALLBACK_AUTO_SWITCH_QUERY_PARAM}=${fallbackAutoSwitchQueryModeOverride ? "1" : "0"}`,
+                          clearedUrl,
                         );
                       }
                     }}
@@ -909,6 +1062,27 @@ const HokkienDictionary = () => {
         )}
 
         {!searching &&
+          !error &&
+          searchWasTruncated &&
+          searchResultLimitEnabled &&
+          !isPhoneticSearch &&
+          !isSingleEntryView && (
+            <div className="max-w-4xl mx-auto mb-4 rounded-md border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+              <span>
+                結果已截斷：目前僅顯示前 {searchResultLimitValue} 筆。{" "}
+              </span>
+              <a
+                href="#"
+                onClick={handleRetryWithoutLimit}
+                className="underline underline-offset-2 hover:opacity-80"
+              >
+                重新查詢（不限制筆數, this may crash browser if results are too
+                large）
+              </a>
+            </div>
+          )}
+
+        {!searching &&
           results.length === 0 &&
           (searchTerm || isSingleEntryView) &&
           !searchTerm.startsWith("(隨機)") &&
@@ -968,6 +1142,10 @@ const HokkienDictionary = () => {
         onAlwaysShowButtonsChange={setAlwaysShowButtons}
         fallbackAutoSwitchQueryMode={fallbackAutoSwitchQueryMode}
         onFallbackAutoSwitchQueryModeChange={setFallbackAutoSwitchQueryMode}
+        resultLimitEnabled={searchResultLimitEnabled}
+        onResultLimitEnabledChange={setSearchResultLimitEnabled}
+        resultLimitValue={searchResultLimitValue}
+        onResultLimitValueChange={setSearchResultLimitValue}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
       />

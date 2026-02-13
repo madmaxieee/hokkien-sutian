@@ -15,7 +15,7 @@ import {
   fetchEntryDetails,
   fetchRandomEntry,
   performPhoneticSearch,
-  performSearch,
+  performSearchWithMeta,
   registerRegexp,
 } from "../src/hokkien/engine";
 import type { SearchMode } from "../src/hokkien/engine";
@@ -39,6 +39,7 @@ const DEFAULT_DB_PATH = `${DEFAULT_CACHE_DIR}/kautian.db`;
 const DEFAULT_SOURCE_URL = "https://sutian.teddysc.me/assets/data/kautian.db";
 const DEFAULT_APP_BASE_URL = "https://sutian.teddysc.me";
 const LOCAL_APP_BASE_URL = "http://hokkien-sutian.localhost:10390/";
+const DEFAULT_RESULT_LIMIT = 200;
 
 const resolveAppBaseUrl = (options: Record<string, unknown>): string => {
   if (options.local === true) return LOCAL_APP_BASE_URL;
@@ -604,6 +605,8 @@ const renderInkResults = async (payload: {
   term?: string | null;
   results?: Result[];
   toneGroups?: ToneGroup[];
+  truncated?: boolean;
+  limit?: number | null;
   appBaseUrl: string;
   showPhoneticDifferences: boolean;
 }) => {
@@ -631,6 +634,14 @@ const renderInkResults = async (payload: {
       term: payload.term,
     });
     const header = h(Text, { bold: true }, linkOrText(headerUrl, headerText));
+    const truncationNotice =
+      payload.truncated && payload.limit
+        ? h(
+            Text,
+            { color: "yellow" },
+            `結果已截斷：目前僅顯示前 ${payload.limit} 筆。`,
+          )
+        : null;
 
     const toneGroupSection =
       toneGroups.length > 0
@@ -871,6 +882,7 @@ const renderInkResults = async (payload: {
       Box,
       { flexDirection: "column" },
       header,
+      truncationNotice,
       toneGroupSection,
       resultsSection,
     );
@@ -891,6 +903,10 @@ const main = async () => {
   cli
     .option("-m, --mode <mode>", "Search mode (default: qs / multi_search)")
     .option("-t, --term <term>", "Search term (optional)")
+    .option(
+      "-l, --limit <n>",
+      `Max number of matched entries to return (default: ${DEFAULT_RESULT_LIMIT})`,
+    )
     .option("-d, --db <path>", `Database path (default: ${DEFAULT_DB_PATH})`)
     .option(
       "--base-url <url>",
@@ -931,6 +947,7 @@ const main = async () => {
       body:
         "- You can pass web-style mode codes like qs, q, me, hf, mf, rx, hft, cat, su.\n" +
         "- Mode defaults to qs (multi_search).\n" +
+        `- Result limit defaults to ${DEFAULT_RESULT_LIMIT}; use --limit <n>, --no-limit, or -L.\n` +
         "- Fallback auto-switch is enabled by default; use --no-fallback-auto-switch-query-mode to disable.\n" +
         "- You can also use positional args: hokkien-sutian-query [mode] [term]." +
         extra,
@@ -938,15 +955,15 @@ const main = async () => {
     return sections;
   });
 
-  const parsed = cli.parse(process.argv, { run: false });
+  const argvWithAliases = process.argv.map((arg) =>
+    arg === "-L" ? "--no-limit" : arg,
+  );
+  const parsed = cli.parse(argvWithAliases, { run: false });
   const options = parsed.options as Record<string, unknown>;
   const args = parsed.args as string[];
 
   if (options.help === true) {
-    // With run:false, cac won't auto-exit after printing help.
-    // Ensure we *only* show help when --help is specified.
-    const maybeCli = cli as { outputHelp?: () => void };
-    maybeCli.outputHelp?.();
+    // Help has already been printed by cac.
     return;
   }
 
@@ -960,6 +977,15 @@ const main = async () => {
   const showPhoneticDifferences = options.phoneticDifferences !== false;
   const fallbackAutoSwitchQueryMode =
     options.fallbackAutoSwitchQueryMode !== false;
+  const noLimit = options.limit === false;
+  const parsedLimit =
+    options.limit !== undefined && options.limit !== false
+      ? Number(options.limit as string)
+      : DEFAULT_RESULT_LIMIT;
+  const maxResults =
+    noLimit || !Number.isFinite(parsedLimit) || parsedLimit <= 0
+      ? undefined
+      : Math.floor(parsedLimit);
 
   const appBaseUrl = resolveAppBaseUrl(options);
 
@@ -1008,6 +1034,8 @@ const main = async () => {
         await renderInkResults({
           mode: "random",
           results: result ? [result] : [],
+          truncated: false,
+          limit: null,
           appBaseUrl,
           showPhoneticDifferences,
         });
@@ -1050,6 +1078,8 @@ const main = async () => {
         query,
         results,
         toneGroups,
+        truncated: false,
+        limit: null,
       };
 
       if (isInk) {
@@ -1057,6 +1087,8 @@ const main = async () => {
           mode,
           results,
           toneGroups,
+          truncated: false,
+          limit: null,
           appBaseUrl,
           showPhoneticDifferences,
         });
@@ -1119,15 +1151,26 @@ const main = async () => {
 
     let effectiveMode = mode;
     let results: Result[] = [];
+    let truncated = false;
     for (const candidateMode of modesToTry) {
-      const candidateResults = performSearch(adapter, termValue, candidateMode);
+      const candidateSearch = performSearchWithMeta(
+        adapter,
+        termValue,
+        candidateMode,
+        {
+          maxResults,
+        },
+      );
+      const candidateResults = candidateSearch.results;
       if (candidateResults.length > 0) {
         effectiveMode = candidateMode as typeof effectiveMode;
         results = candidateResults;
+        truncated = candidateSearch.truncated;
         break;
       }
       if (candidateMode === mode) {
         results = candidateResults;
+        truncated = candidateSearch.truncated;
       }
     }
 
@@ -1136,6 +1179,8 @@ const main = async () => {
         mode: effectiveMode,
         term: termValue,
         results,
+        truncated,
+        limit: maxResults ?? null,
         appBaseUrl,
         showPhoneticDifferences,
       });
@@ -1153,6 +1198,8 @@ const main = async () => {
       requestedMode: mode,
       term: termValue,
       results,
+      truncated,
+      limit: maxResults ?? null,
     };
     const indent = pretty ? 2 : 0;
     console.log(JSON.stringify(payload, mapReplacer, indent));

@@ -28,6 +28,11 @@ export type PhoneticIndex = {
   availableTones: Set<number>;
 };
 
+export type SearchExecutionResult = {
+  results: Result[];
+  truncated: boolean;
+};
+
 const emptyResult: QueryResult = { columns: [], values: [] };
 
 const execSingle = (
@@ -74,17 +79,64 @@ export const registerRegexp = (db: DBAdapter) => {
   }
 };
 
-const regexSearchFallback = (db: DBAdapter, pattern: string): Set<number> => {
+const regexSearchFallback = (
+  db: DBAdapter,
+  pattern: string,
+  maxResults?: number,
+): { entryIds: Set<number>; truncated: boolean } => {
   const re = new RegExp(pattern);
   const entryIds = new Set<number>();
+  let truncated = false;
   const result = execSingle(db, "SELECT id, hanzi FROM entries");
   result.values.forEach((row) => {
+    if (maxResults && entryIds.size >= maxResults) {
+      truncated = true;
+      return;
+    }
     const id = row[0] as number;
     const hanzi = row[1] as string;
     if (typeof hanzi !== "string") return;
     if (re.test(hanzi)) entryIds.add(id);
   });
-  return entryIds;
+  return { entryIds, truncated };
+};
+
+const execWithOptionalLimit = (
+  db: DBAdapter,
+  sql: string,
+  params: Record<string, SqlValue>,
+  maxResults: number | null,
+): { queryResult: QueryResult; truncated: boolean } => {
+  if (maxResults === null) {
+    return {
+      queryResult: execSingle(db, sql, params),
+      truncated: false,
+    };
+  }
+
+  if (db.execWithLimit) {
+    const limited = db.execWithLimit(sql, params, maxResults);
+    return {
+      queryResult: limited.result,
+      truncated: limited.hasMore,
+    };
+  }
+
+  const limitPlusOneKey = "$__limit_plus_one";
+  const plusOneResult = execSingle(db, `${sql} LIMIT ${limitPlusOneKey}`, {
+    ...params,
+    [limitPlusOneKey]: maxResults + 1,
+  });
+  const truncated = plusOneResult.values.length > maxResults;
+  return {
+    queryResult: {
+      columns: plusOneResult.columns,
+      values: truncated
+        ? plusOneResult.values.slice(0, maxResults)
+        : plusOneResult.values,
+    },
+    truncated,
+  };
 };
 
 export const fetchEntryDetails = (
@@ -194,18 +246,29 @@ export const fetchEntryDetails = (
   };
 };
 
-export const performSearch = (
+export const performSearchWithMeta = (
   db: DBAdapter,
   term: string,
   mode: SearchMode,
-): Result[] => {
-  if (!term.trim()) return [];
+  options?: {
+    maxResults?: number;
+  },
+): SearchExecutionResult => {
+  if (!term.trim()) return { results: [], truncated: false };
+
+  const rawMaxResults = options?.maxResults;
+  const maxResults =
+    typeof rawMaxResults === "number" &&
+    Number.isFinite(rawMaxResults) &&
+    rawMaxResults > 0
+      ? Math.floor(rawMaxResults)
+      : null;
 
   if (mode === "single_entry") {
     const entryId = parseInt(term.trim(), 10);
-    if (Number.isNaN(entryId)) return [];
+    if (Number.isNaN(entryId)) return { results: [], truncated: false };
     const result = fetchEntryDetails(db, entryId);
-    return result ? [result] : [];
+    return { results: result ? [result] : [], truncated: false };
   }
 
   if (mode === "multi_search") {
@@ -221,17 +284,23 @@ export const performSearch = (
         if (foundResults.has(substring)) continue;
 
         const matchedEntries: Result[] = [];
+        const sql =
+          "SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'";
+        const params: Record<string, SqlValue> = { $term: substring };
         const matchRes = execSingle(
           db,
-          "SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'",
-          { $term: substring },
+          maxResults === null ? sql : `${sql} LIMIT $limit`,
+          maxResults === null ? params : { ...params, $limit: maxResults },
         );
 
-        matchRes.values.forEach((row) => {
+        for (const row of matchRes.values) {
           const id = row[0] as number;
           const details = fetchEntryDetails(db, id);
           if (details) matchedEntries.push(details);
-        });
+          if (maxResults !== null && matchedEntries.length >= maxResults) {
+            break;
+          }
+        }
 
         if (matchedEntries.length > 0) {
           foundResults.set(substring, {
@@ -242,9 +311,12 @@ export const performSearch = (
       }
     }
 
-    return Array.from(foundResults.values())
-      .sort((a, b) => b.termLength - a.termLength)
-      .flatMap((item) => item.results);
+    return {
+      results: Array.from(foundResults.values())
+        .sort((a, b) => b.termLength - a.termLength)
+        .flatMap((item) => item.results),
+      truncated: false,
+    };
   }
 
   const trimmedTerm = term.trim();
@@ -253,51 +325,126 @@ export const performSearch = (
     hokkien_entry:
       "SELECT id FROM entries WHERE hanzi LIKE $term OR romanization LIKE $term",
     mandarin_example:
-      "SELECT DISTINCT entry_id FROM examples WHERE mandarin_translation LIKE $term",
+      "SELECT DISTINCT e.id FROM entries e JOIN examples ex ON ex.entry_id = e.id WHERE ex.mandarin_translation LIKE $term",
     hokkien_example:
-      "SELECT DISTINCT entry_id FROM examples WHERE hanzi LIKE $term OR romanization LIKE $term",
+      "SELECT DISTINCT e.id FROM entries e JOIN examples ex ON ex.entry_id = e.id WHERE ex.hanzi LIKE $term OR ex.romanization LIKE $term",
     mandarin_fulltext:
       "SELECT id FROM entries WHERE hanzi LIKE $term UNION SELECT entry_id FROM meanings WHERE explanation LIKE $term UNION SELECT entry_id FROM examples WHERE mandarin_translation LIKE $term",
     regex: "SELECT id FROM entries WHERE hanzi REGEXP $term",
     hokkien_fulltext:
-      "SELECT id FROM entries WHERE hanzi LIKE $term OR romanization LIKE $term UNION SELECT entry_id FROM examples WHERE hanzi LIKE $term OR romanization LIKE $term",
+      "SELECT id FROM entries WHERE hanzi LIKE $term OR romanization LIKE $term UNION SELECT e.id FROM entries e JOIN examples ex ON ex.entry_id = e.id WHERE ex.hanzi LIKE $term OR ex.romanization LIKE $term",
     category: "SELECT id FROM entries WHERE category LIKE $term",
     multi_search: "",
     single_entry: "",
   };
 
   const query = queries[mode];
-  if (!query) return [];
+  if (!query) return { results: [], truncated: false };
 
-  const entryIds = new Set<number>();
+  let truncated = false;
+  const orderedEntryIds: number[] = [];
+
+  const pushOrderedEntryId = (value: unknown) => {
+    const id = value as number;
+    if (!Number.isFinite(id)) return;
+    orderedEntryIds.push(id);
+  };
+
+  const mfRankedQuery =
+    "WITH matched AS (" +
+    " SELECT id AS entry_id, CASE WHEN hanzi = $exactTerm THEN 0 WHEN hanzi LIKE $term THEN 4 ELSE 5 END AS rank FROM entries WHERE hanzi LIKE $term" +
+    " UNION ALL" +
+    " SELECT entry_id, CASE WHEN TRIM(explanation) = $exactTerm THEN 0 WHEN explanation LIKE $prefixTerm THEN 1 ELSE 2 END AS rank FROM meanings WHERE explanation LIKE $term" +
+    " UNION ALL" +
+    " SELECT entry_id, CASE WHEN TRIM(mandarin_translation) = $exactTerm THEN 0 WHEN mandarin_translation LIKE $prefixTerm THEN 1 ELSE 2 END AS rank FROM examples WHERE mandarin_translation LIKE $term" +
+    " ), ranked AS (" +
+    " SELECT entry_id, MIN(rank) AS best_rank FROM matched GROUP BY entry_id" +
+    " )" +
+    " SELECT ranked.entry_id FROM ranked JOIN entries e ON e.id = ranked.entry_id ORDER BY best_rank ASC, ranked.entry_id ASC";
+
   if (mode === "regex") {
-    const params = { $term: trimmedTerm };
+    const params: Record<string, SqlValue> = { $term: trimmedTerm };
     try {
-      execSingle(db, query, params).values.forEach((row) => {
-        entryIds.add(row[0] as number);
+      const searchResult = execWithOptionalLimit(db, query, params, maxResults);
+      truncated = searchResult.truncated;
+      searchResult.queryResult.values.forEach((row) => {
+        pushOrderedEntryId(row[0]);
       });
     } catch {
       // For runtimes that can't register SQL functions (e.g., bun:sqlite 1.3.x),
       // fall back to JS filtering.
-      return sortResults(
-        Array.from(regexSearchFallback(db, trimmedTerm))
+      const fallback = regexSearchFallback(
+        db,
+        trimmedTerm,
+        maxResults ?? undefined,
+      );
+      const fallbackResults = sortResults(
+        Array.from(fallback.entryIds)
           .map((id) => fetchEntryDetails(db, id))
           .filter(Boolean) as Result[],
         trimmedTerm,
       );
+      return { results: fallbackResults, truncated: fallback.truncated };
     }
+  } else if (mode === "mandarin_fulltext") {
+    const params: Record<string, SqlValue> = {
+      $term: likeTerm,
+      $exactTerm: trimmedTerm,
+      $prefixTerm: `${trimmedTerm}%`,
+    };
+    const searchResult = execWithOptionalLimit(
+      db,
+      mfRankedQuery,
+      params,
+      maxResults,
+    );
+    truncated = searchResult.truncated;
+    searchResult.queryResult.values.forEach((row) => {
+      pushOrderedEntryId(row[0]);
+    });
   } else {
-    const params = { $term: likeTerm };
-    execSingle(db, query, params).values.forEach((row) => {
-      entryIds.add(row[0] as number);
+    const params: Record<string, SqlValue> = { $term: likeTerm };
+    const searchResult = execWithOptionalLimit(db, query, params, maxResults);
+    truncated = searchResult.truncated;
+    searchResult.queryResult.values.forEach((row) => {
+      pushOrderedEntryId(row[0]);
     });
   }
 
-  const detailedResults = Array.from(entryIds)
+  const dedupedOrderedEntryIds = Array.from(new Set(orderedEntryIds));
+
+  const detailedResults = dedupedOrderedEntryIds
     .map((id) => fetchEntryDetails(db, id))
     .filter(Boolean) as Result[];
 
-  return sortResults(detailedResults, trimmedTerm);
+  const effectiveTruncated =
+    truncated &&
+    maxResults !== null &&
+    Number.isFinite(maxResults) &&
+    detailedResults.length >= maxResults;
+
+  if (mode === "mandarin_fulltext") {
+    return {
+      results: detailedResults,
+      truncated: effectiveTruncated,
+    };
+  }
+
+  return {
+    results: sortResults(detailedResults, trimmedTerm),
+    truncated: effectiveTruncated,
+  };
+};
+
+export const performSearch = (
+  db: DBAdapter,
+  term: string,
+  mode: SearchMode,
+  options?: {
+    maxResults?: number;
+  },
+): Result[] => {
+  return performSearchWithMeta(db, term, mode, options).results;
 };
 
 export const fetchRandomEntry = (db: DBAdapter): Result | null => {

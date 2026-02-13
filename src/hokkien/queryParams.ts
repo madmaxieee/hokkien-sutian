@@ -1,6 +1,8 @@
 import type { SearchMode } from "./engine";
 
 export const FALLBACK_AUTO_SWITCH_QUERY_PARAM = "fa";
+export const SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM = "le";
+export const SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM = "lv";
 
 export const QUERY_PARAM_TO_MODE = {
   q: "hokkien_entry",

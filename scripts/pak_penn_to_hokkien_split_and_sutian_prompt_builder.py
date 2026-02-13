@@ -2,6 +2,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "jieba",
 #     "loguru",
 #     "opencc",
 # ]
@@ -10,11 +11,14 @@ import argparse
 import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+import jieba
+import jieba.posseg as pseg
 from loguru import logger
 import opencc
 
@@ -35,34 +39,40 @@ Based on the original text and the provided dictionary lookups for each word, pl
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 QUERY_SCRIPT_PATH = SCRIPT_DIR / "query.ts"
 TO_ZH_TW_CONVERTER = opencc.OpenCC("s2twp.json")
+DEFAULT_QUERY_MODE = "mf"
+DEFAULT_MAX_RESULTS_PER_WORD = 3
+DEFAULT_MAX_MEANINGS_PER_ENTRY = 12
+DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING = 2
+DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = 1
+
+MAX_MEANINGS_PER_ENTRY = DEFAULT_MAX_MEANINGS_PER_ENTRY
+MAX_ROMANIZED_EXAMPLES_PER_MEANING = DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING
+MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
 
 # --- Core Functions ---
 
 
 def invoke_cli(
     term: str,
-    mode: str = "qs",
+    mode: str = DEFAULT_QUERY_MODE,
     db_path: str | None = None,
     no_fallback: bool = False,
+    max_results: int | None = None,
 ) -> dict[str, Any]:
     """
     Invokes the hokkien-sutian-query CLI and returns parsed JSON.
 
     Args:
         term: The search term.
-        mode: The search mode (default: qs).
+        mode: The search mode (default: mf / mandarin_fulltext).
         db_path: Optional database path.
         no_fallback: Disable CLI fallback auto-switch.
+        max_results: Optional max results passed to CLI SQL-level limiter.
 
     Returns:
         Parsed JSON dict with keys: mode, requestedMode, term, results.
     """
-    query_term = TO_ZH_TW_CONVERTER.convert(term)
-    cmd = ["bun", "run", str(QUERY_SCRIPT_PATH), mode, query_term, "--no-pretty"]
-    if db_path:
-        cmd.extend(["--db", db_path])
-    if no_fallback:
-        cmd.append("--no-fallback-auto-switch-query-mode")
+    cmd = build_query_cli_cmd(term, mode, db_path, no_fallback, max_results)
 
     logger.debug(f"Invoking CLI: {' '.join(cmd)}")
     try:
@@ -86,6 +96,30 @@ def invoke_cli(
         sys.exit(1)
 
 
+def build_query_cli_cmd(
+    term: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_results: int | None,
+) -> list[str]:
+    """Builds argv for invoking scripts/query.ts via bun."""
+    query_term = TO_ZH_TW_CONVERTER.convert(term)
+    cmd = ["bun", "run", str(QUERY_SCRIPT_PATH), mode, query_term, "--no-pretty"]
+    if db_path:
+        cmd.extend(["--db", db_path])
+    if no_fallback:
+        cmd.append("--no-fallback-auto-switch-query-mode")
+    if isinstance(max_results, int) and max_results > 0:
+        cmd.extend(["--limit", str(max_results)])
+    return cmd
+
+
+def shell_format_cmd(cmd: list[str]) -> str:
+    """Formats argv into shell-safe command string."""
+    return " ".join(shlex.quote(part) for part in cmd)
+
+
 def normalize_hanzi(hanzi: str) -> str:
     """
     Normalizes hanzi by stripping annotations like 【白】, 【文】, 【替】.
@@ -99,7 +133,9 @@ def normalize_hanzi(hanzi: str) -> str:
     return re.sub(r"【[^】]+】", "", hanzi)
 
 
-def group_results_by_hanzi(results: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+def group_results_by_hanzi(
+    results: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
     """
     Groups results by normalized hanzi.
 
@@ -132,7 +168,9 @@ def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> 
     lines = []
 
     # Header: hanzi romanization (#id)
-    lines.append(f"{header_level} {entry['hanzi']} {entry['romanization']} (#{entry['id']})")
+    lines.append(
+        f"{header_level} {entry['hanzi']} {entry['romanization']} (#{entry['id']})"
+    )
     lines.append("")
 
     # Category
@@ -141,7 +179,8 @@ def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> 
         lines.append("")
 
     # Meanings
-    for meaning in entry.get("meanings", []):
+    meanings = entry.get("meanings", [])
+    for meaning in meanings[:MAX_MEANINGS_PER_ENTRY]:
         pos = meaning.get("part_of_speech", "")
         explanation = meaning.get("explanation", "")
         examples = meaning.get("examples", [])
@@ -151,14 +190,38 @@ def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> 
         lines.append(f"{display_id}. ({pos}) {explanation}")
 
         # Examples
+        shown_romanized = 0
+        shown_non_romanized = 0
+        shown_examples = 0
         for example in examples:
             hanzi_ex = example.get("hanzi", "")
-            romanization_ex = example.get("romanization", "")
+            romanization_ex = str(example.get("romanization", "")).strip()
             mandarin_ex = example.get("mandarin_translation", "")
+
+            if romanization_ex:
+                if shown_romanized >= MAX_ROMANIZED_EXAMPLES_PER_MEANING:
+                    continue
+                shown_romanized += 1
+            else:
+                if (
+                    MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING >= 0
+                    and shown_non_romanized >= MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
+                ):
+                    continue
+                shown_non_romanized += 1
+
             lines.append(f"   - {hanzi_ex} ({romanization_ex})")
             if mandarin_ex:
                 lines.append(f"     {mandarin_ex}")
+            shown_examples += 1
 
+        if len(examples) > shown_examples:
+            lines.append(f"   - …（省略 {len(examples) - shown_examples} 例）")
+
+        lines.append("")
+
+    if len(meanings) > MAX_MEANINGS_PER_ENTRY:
+        lines.append(f"*（省略 {len(meanings) - MAX_MEANINGS_PER_ENTRY} 條義項）*")
         lines.append("")
 
     # Entry synonyms
@@ -269,14 +332,6 @@ def segment_with_jieba(text: str) -> list[str]:
     Returns:
         List of unique segmented words.
     """
-    try:
-        import jieba
-        import jieba.posseg as pseg
-    except ImportError:
-        logger.error("FATAL: jieba not available.")
-        logger.error("Please run: uv run --with jieba <script> --jieba ...")
-        sys.exit(1)
-
     logger.info("Initializing jieba...")
     jieba.initialize()
 
@@ -284,8 +339,15 @@ def segment_with_jieba(text: str) -> list[str]:
     tw_to_cn = opencc.OpenCC("tw2s.json")
     cn_to_tw = opencc.OpenCC("s2twp.json")
 
+    cjk_only_text = "".join(re.findall(r"[\u4E00-\u9FFF]+", text))
+    if cjk_only_text != text:
+        logger.info("Stripped non-Chinese characters before segmentation.")
+    if not cjk_only_text:
+        logger.warning("No Chinese characters found for segmentation.")
+        return []
+
     logger.info("Converting to Simplified Chinese for segmentation...")
-    simplified_text = tw_to_cn.convert(text)
+    simplified_text = tw_to_cn.convert(cjk_only_text)
 
     logger.info("Segmenting with jieba...")
     pos_to_drop = {"e", "y"}  # interjections, modal particles
@@ -306,9 +368,31 @@ def segment_with_jieba(text: str) -> list[str]:
     seen = set()
     unique_words = [x for x in words_to_query if not (x in seen or seen.add(x))]
 
-    logger.info(f"Segmented into {len(unique_words)} unique words: {', '.join(unique_words)}")
+    logger.info(
+        f"Segmented into {len(unique_words)} unique words: {', '.join(unique_words)}"
+    )
     if dropped_words:
-        logger.info(f"Dropped {len(dropped_words)} interjections/particles: {', '.join(dropped_words)}")
+        logger.info(
+            f"Dropped {len(dropped_words)} interjections/particles: {', '.join(dropped_words)}"
+        )
+
+    return unique_words
+
+
+def build_query_words_from_input(input_text: str) -> list[str]:
+    """Segments and filters input into unique query words."""
+    segmented_words = segment_with_jieba(input_text)
+    words = [word for word in segmented_words if is_queryable_word(word)]
+
+    # Deduplicate while preserving order after filtering
+    seen_filtered = set()
+    unique_words = [
+        x for x in words if not (x in seen_filtered or seen_filtered.add(x))
+    ]
+
+    removed_count = len(segmented_words) - len(unique_words)
+    if removed_count > 0:
+        logger.info(f"Filtered out {removed_count} non-query tokens.")
 
     return unique_words
 
@@ -319,6 +403,7 @@ def query_all_jieba(
     db_path: str | None,
     no_fallback: bool,
     max_workers: int,
+    max_results_per_word: int,
 ) -> dict[str, dict[str, Any]]:
     """
     Queries all words in parallel using ThreadPoolExecutor.
@@ -329,16 +414,26 @@ def query_all_jieba(
         db_path: Optional database path.
         no_fallback: Disable fallback auto-switch.
         max_workers: Max parallel workers.
+        max_results_per_word: Max results passed to query.ts --limit.
 
     Returns:
         Dict mapping word -> CLI response dict.
     """
-    logger.info(f"Querying {len(words)} words in parallel (max_workers={max_workers})...")
+    logger.info(
+        f"Querying {len(words)} words in parallel (max_workers={max_workers})..."
+    )
     results = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_word = {
-            executor.submit(invoke_cli, word, mode, db_path, no_fallback): word
+            executor.submit(
+                invoke_cli,
+                word,
+                mode,
+                db_path,
+                no_fallback,
+                max_results_per_word,
+            ): word
             for word in words
         }
 
@@ -367,6 +462,77 @@ def strip_cjk_punctuation(text: str) -> str:
     return re.sub(r"[\u3000-\u303F\uFF00-\uFFEF]", "", text)
 
 
+def is_queryable_word(word: str) -> bool:
+    """Returns whether a segmented token should be queried."""
+    cleaned = strip_cjk_punctuation(word).strip()
+    if not cleaned:
+        return False
+    # Query only tokens containing Chinese characters.
+    if not re.search(r"[\u4E00-\u9FFF]", cleaned):
+        return False
+    return True
+
+
+def is_single_cjk_char(word: str) -> bool:
+    """Returns True if token is exactly one CJK ideograph."""
+    return len(word) == 1 and bool(re.fullmatch(r"[\u4E00-\u9FFF]", word))
+
+
+def trim_and_dedupe_results(
+    term: str,
+    results: list[dict[str, Any]],
+    max_results_per_word: int,
+    mode: str,
+) -> list[dict[str, Any]]:
+    """Dedupes by entry id and limits result count, with lightweight relevance ranking."""
+
+    def score_entry(entry: dict[str, Any]) -> tuple[int, int]:
+        score = 0
+        if entry.get("hanzi") == term:
+            score += 80
+
+        for meaning in entry.get("meanings", []):
+            explanation = str(meaning.get("explanation", ""))
+            if term and term == explanation:
+                score += 60
+            elif term and term in explanation:
+                score += 30
+
+            for example in meaning.get("examples", []):
+                mandarin_text = str(example.get("mandarin_translation", ""))
+                if term and term == mandarin_text:
+                    score += 70
+                elif term and term in mandarin_text:
+                    score += 40
+
+        # Prefer older/lower ids when relevance ties.
+        entry_id = entry.get("id") if isinstance(entry.get("id"), int) else 10**9
+        return (score, -entry_id)
+
+    effective_limit = max_results_per_word
+    if mode == "mf":
+        # Extra strict for mandarin_fulltext to prevent huge prompt payloads.
+        if is_single_cjk_char(term):
+            effective_limit = min(effective_limit, 1)
+        elif len(term) == 2:
+            effective_limit = min(effective_limit, 2)
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for entry in results:
+        entry_id = entry.get("id")
+        if isinstance(entry_id, int) and entry_id in seen_ids:
+            continue
+        if isinstance(entry_id, int):
+            seen_ids.add(entry_id)
+        deduped.append(entry)
+
+    deduped.sort(key=score_entry, reverse=True)
+
+    if effective_limit > 0 and len(deduped) > effective_limit:
+        return deduped[:effective_limit]
+    return deduped
+
+
 def run_default_path(
     input_text: str,
     mode: str,
@@ -374,7 +540,7 @@ def run_default_path(
     no_fallback: bool,
 ) -> list[str]:
     """
-    Runs the default path: single CLI call with qs mode on entire sentence.
+    Runs the default path: single CLI call on entire sentence.
 
     Args:
         input_text: The original input text.
@@ -402,7 +568,11 @@ def run_default_path(
 
     sections = []
     for normalized_hanzi, group_results in groups:
-        sections.append(format_query_section(normalized_hanzi, group_results, is_char_fallback=False))
+        sections.append(
+            format_query_section(
+                normalized_hanzi, group_results, is_char_fallback=False
+            )
+        )
 
     return sections
 
@@ -413,6 +583,7 @@ def run_jieba_path(
     db_path: str | None,
     no_fallback: bool,
     max_workers: int,
+    max_results_per_word: int,
 ) -> list[str]:
     """
     Runs the jieba path: segment, parallel query, character fallback.
@@ -423,26 +594,43 @@ def run_jieba_path(
         db_path: Optional database path.
         no_fallback: Disable fallback auto-switch.
         max_workers: Max parallel workers.
+        max_results_per_word: Maximum entries kept per queried token.
 
     Returns:
         List of formatted section strings.
     """
-    # Segment with jieba
-    words = segment_with_jieba(input_text)
+    words = build_query_words_from_input(input_text)
 
     if not words:
         logger.warning("No words to query after segmentation.")
         return []
 
     # Query all words in parallel
-    word_results = query_all_jieba(words, mode, db_path, no_fallback, max_workers)
+    word_results = query_all_jieba(
+        words,
+        mode,
+        db_path,
+        no_fallback,
+        max_workers,
+        max_results_per_word,
+    )
 
     sections = []
     failed_words = []
 
     for word in words:
         response = word_results.get(word, {"results": []})
-        results = response.get("results", [])
+        raw_results = response.get("results", [])
+        results = trim_and_dedupe_results(
+            word,
+            raw_results,
+            max_results_per_word,
+            mode,
+        )
+        if len(raw_results) > len(results):
+            logger.info(
+                f"Trimmed results for '{word}': {len(raw_results)} -> {len(results)}"
+            )
 
         if results:
             # Word found: format normally
@@ -454,7 +642,9 @@ def run_jieba_path(
 
     # Character fallback for failed multi-character words
     if failed_words:
-        logger.info(f"Words without results: {', '.join(failed_words)}. Falling back to character-level lookup.")
+        logger.info(
+            f"Words without results: {', '.join(failed_words)}. Falling back to character-level lookup."
+        )
 
         # Collect unique characters from failed words
         chars_to_lookup = []
@@ -467,13 +657,28 @@ def run_jieba_path(
                         seen_chars.add(char)
 
         if chars_to_lookup:
-            logger.info(f"Looking up {len(chars_to_lookup)} characters: {', '.join(chars_to_lookup)}")
-            char_results = query_all_jieba(chars_to_lookup, mode, db_path, no_fallback, max_workers)
+            logger.info(
+                f"Looking up {len(chars_to_lookup)} characters: {', '.join(chars_to_lookup)}"
+            )
+            char_results = query_all_jieba(
+                chars_to_lookup,
+                mode,
+                db_path,
+                no_fallback,
+                max_workers,
+                max_results_per_word,
+            )
 
             # Build a map of character -> results for easy lookup
             char_to_entries = {}
             for char, response in char_results.items():
-                char_to_entries[char] = response.get("results", [])
+                raw_char_results = response.get("results", [])
+                char_to_entries[char] = trim_and_dedupe_results(
+                    char,
+                    raw_char_results,
+                    max_results_per_word,
+                    mode,
+                )
 
             # Append character sections under each failed word
             for word in failed_words:
@@ -489,6 +694,31 @@ def run_jieba_path(
                             )
 
     return sections
+
+
+def run_dry_run(
+    input_text: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_results_per_word: int,
+) -> None:
+    """Prints commands that would be used to invoke query.ts, without executing."""
+    words = build_query_words_from_input(input_text)
+    if not words:
+        logger.warning("No words to query after segmentation.")
+        return
+
+    logger.info(f"Dry-run: would query {len(words)} words (query.ts not executed).")
+    for word in words:
+        cmd = build_query_cli_cmd(
+            word,
+            mode,
+            db_path,
+            no_fallback,
+            max_results_per_word,
+        )
+        print(shell_format_cmd(cmd))
 
 
 def read_input(args: argparse.Namespace) -> str:
@@ -518,7 +748,9 @@ def read_input(args: argparse.Namespace) -> str:
         logger.info("Reading text from standard input...")
         return sys.stdin.read().strip()
     else:
-        logger.error("No input text provided. Please provide text via argument, --file, or stdin.")
+        logger.error(
+            "No input text provided. Please provide text via argument, --file, or stdin."
+        )
         sys.exit(1)
 
 
@@ -544,13 +776,6 @@ def main():
         help="Path to a file containing the input text to process.",
     )
 
-    # Segmentation mode
-    parser.add_argument(
-        "--jieba",
-        action="store_true",
-        help="Enable jieba segmentation mode (requires: uv run --with jieba).",
-    )
-
     # CLI pass-through options
     parser.add_argument(
         "--db",
@@ -560,23 +785,64 @@ def main():
     parser.add_argument(
         "--mode",
         type=str,
-        default="qs",
-        help="CLI search mode (default: qs).",
+        default=DEFAULT_QUERY_MODE,
+        help="CLI search mode (default: mf, i.e. mandarin_fulltext).",
     )
     parser.add_argument(
         "--no-fallback",
         action="store_true",
         help="Disable CLI fallback auto-switch.",
     )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Run jieba and print query.ts commands only (shell-quoted), "
+            "without executing queries."
+        ),
+    )
 
-    # Parallel execution
+    # Parallel execution (mandatory jieba segmentation mode)
     parser.add_argument(
         "--max-workers",
         type=int,
         default=8,
-        help="ThreadPoolExecutor max workers for --jieba mode (default: 8).",
+        help="ThreadPoolExecutor max workers for jieba mode (default: 8).",
     )
-
+    parser.add_argument(
+        "--max-results-per-word",
+        type=int,
+        default=DEFAULT_MAX_RESULTS_PER_WORD,
+        help=(
+            "Maximum number of dictionary entries kept per segmented word "
+            f"(default: {DEFAULT_MAX_RESULTS_PER_WORD})."
+        ),
+    )
+    parser.add_argument(
+        "--max-meanings-per-entry",
+        type=int,
+        default=DEFAULT_MAX_MEANINGS_PER_ENTRY,
+        help=f"Maximum meanings shown per entry (default: {DEFAULT_MAX_MEANINGS_PER_ENTRY}).",
+    )
+    parser.add_argument(
+        "--max-romanized-examples-per-meaning",
+        type=int,
+        default=DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING,
+        help=(
+            "Maximum examples WITH romanization shown per meaning "
+            f"(default: {DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING})."
+        ),
+    )
+    parser.add_argument(
+        "--max-non-romanized-examples-per-meaning",
+        type=int,
+        default=DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING,
+        help=(
+            "Maximum examples WITHOUT romanization shown per meaning "
+            f"(default: {DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING}; use -1 for unlimited)."
+        ),
+    )
     # Output options
     parser.add_argument(
         "-p",
@@ -599,30 +865,44 @@ def main():
 
     args = parser.parse_args()
 
+    global MAX_MEANINGS_PER_ENTRY
+    global MAX_ROMANIZED_EXAMPLES_PER_MEANING
+    global MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
+
+    MAX_MEANINGS_PER_ENTRY = max(0, args.max_meanings_per_entry)
+    MAX_ROMANIZED_EXAMPLES_PER_MEANING = max(
+        0,
+        args.max_romanized_examples_per_meaning,
+    )
+    MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = args.max_non_romanized_examples_per_meaning
+
     # Read input
     input_text = read_input(args)
     if not input_text:
         logger.error("Input text is empty. Exiting.")
         sys.exit(1)
 
-    # Run appropriate path
-    if args.jieba:
-        logger.info("Running jieba segmentation mode...")
-        sections = run_jieba_path(
+    if args.dry_run:
+        logger.info("Running mandatory jieba segmentation mode (dry-run)...")
+        run_dry_run(
             input_text,
             args.mode,
             args.db,
             args.no_fallback,
-            args.max_workers,
+            args.max_results_per_word,
         )
-    else:
-        logger.info("Running default mode (qs on whole sentence)...")
-        sections = run_default_path(
-            input_text,
-            args.mode,
-            args.db,
-            args.no_fallback,
-        )
+        return
+
+    # Run mandatory jieba path
+    logger.info("Running mandatory jieba segmentation mode...")
+    sections = run_jieba_path(
+        input_text,
+        args.mode,
+        args.db,
+        args.no_fallback,
+        args.max_workers,
+        args.max_results_per_word,
+    )
 
     # Assemble final document
     markdown_input_text = (

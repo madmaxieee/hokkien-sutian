@@ -29,21 +29,23 @@ The `_middleware.js` function handles canonical domain redirection:
 
 The app supports deep linking via URL query parameters:
 
-| Parameter | Mode                | Description                                                 |
-| --------- | ------------------- | ----------------------------------------------------------- |
-| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)           |
-| `me`      | `mandarin_example`  | Search examples by Mandarin translation                     |
-| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)          |
-| `mf`      | `mandarin_fulltext` | Full-text search in Mandarin across all fields              |
-| `rx`      | `regex`             | Regex search on entry hanzi                                 |
-| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples     |
-| `cat`     | `category`          | Browse by category                                          |
-| `qs`      | `multi_search`      | Sentence segmentation search                                |
-| `su`      | `single_entry`      | Direct entry lookup by ID                                   |
-| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)                 |
-| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                       |
-| `st`      | `phonetic`          | Phonetic search by tone (聲調)                              |
-| `fa`      | `settings override` | Override fallback auto-switch query mode (`1` on / `0` off) |
+| Parameter | Mode                | Description                                                             |
+| --------- | ------------------- | ----------------------------------------------------------------------- |
+| `q`, `he` | `hokkien_entry`     | Search entries by Hokkien (hanzi or romanization)                       |
+| `me`      | `mandarin_example`  | Search examples by Mandarin translation                                 |
+| `hf`      | `hokkien_example`   | Search examples by Hokkien (hanzi or romanization)                      |
+| `mf`      | `mandarin_fulltext` | Full-text search in 北平方言 fields (exact/prefix matches ranked first) |
+| `rx`      | `regex`             | Regex search on entry hanzi                                             |
+| `hft`     | `hokkien_fulltext`  | Full-text search in Hokkien across entries and examples                 |
+| `cat`     | `category`          | Browse by category                                                      |
+| `qs`      | `multi_search`      | Sentence segmentation search                                            |
+| `su`      | `single_entry`      | Direct entry lookup by ID                                               |
+| `si`      | `phonetic`          | Phonetic search by initial consonant (聲母)                             |
+| `sf`      | `phonetic`          | Phonetic search by final/rhyme (韻母)                                   |
+| `st`      | `phonetic`          | Phonetic search by tone (聲調)                                          |
+| `fa`      | `settings override` | Override fallback auto-switch query mode (`1` on / `0` off)             |
+| `le`      | `settings override` | Override result-limit enabled (`1` on / `0` off)                        |
+| `lv`      | `settings override` | Override result-limit value (positive integer)                          |
 
 ## Fallback Auto-Switch Query Mode
 
@@ -74,6 +76,11 @@ Concrete fallback sequence used by implementation:
   - `?fa=0` → force disabled
 
 URL `fa` overrides the local settings toggle for that URL state.
+
+Result-limit controls can also be overridden per URL state:
+
+- `?le=1&lv=200` → enable result limit, limit to 200 rows
+- `?le=0&lv=200` → disable limit for this URL state (settings panel value is unchanged)
 
 ## Search Modes
 
@@ -108,14 +115,65 @@ Searches example sentences by Hokkien text or romanization.
 **UI Label:** 用北平方言查全文
 
 ```sql
-SELECT id FROM entries WHERE hanzi LIKE $term
-UNION
-SELECT entry_id FROM meanings WHERE explanation LIKE $term
-UNION
-SELECT entry_id FROM examples WHERE mandarin_translation LIKE $term
+WITH matched AS (
+  SELECT id AS entry_id,
+         CASE
+           WHEN hanzi = $exactTerm THEN 0
+           WHEN hanzi LIKE $term THEN 4
+           ELSE 5
+         END AS rank
+  FROM entries
+  WHERE hanzi LIKE $term
+
+  UNION ALL
+
+  SELECT entry_id,
+         CASE
+           WHEN TRIM(explanation) = $exactTerm THEN 0
+           WHEN explanation LIKE $prefixTerm THEN 1
+           ELSE 2
+         END AS rank
+  FROM meanings
+  WHERE explanation LIKE $term
+
+  UNION ALL
+
+  SELECT entry_id,
+         CASE
+           WHEN TRIM(mandarin_translation) = $exactTerm THEN 0
+           WHEN mandarin_translation LIKE $prefixTerm THEN 1
+           ELSE 2
+         END AS rank
+  FROM examples
+  WHERE mandarin_translation LIKE $term
+),
+ranked AS (
+  SELECT entry_id, MIN(rank) AS best_rank
+  FROM matched
+  GROUP BY entry_id
+)
+SELECT entry_id
+FROM ranked
+ORDER BY best_rank ASC, entry_id ASC
 ```
 
-Comprehensive search across entry hanzi, meaning explanations, and example translations.
+Comprehensive search across entry hanzi, meaning explanations, and example translations, with MOE-like priority behavior:
+
+1. Exact text match first (`TRIM(field) = term`)
+2. Prefix match next (`field LIKE term || '%'`)
+3. Other contains matches (`field LIKE '%' || term || '%'`)
+
+This ensures strong matches (e.g. `便秘` → `祕結`) are ranked ahead of looser contextual hits.
+
+## Result Truncation Signaling
+
+When result limit is enabled (`N`), query execution uses an efficient **N+1 probe**:
+
+1. Collect at most the first `N` rows
+2. Attempt one additional row
+3. If the extra row exists, mark `truncated = true` and discard that row
+
+This allows both CLI and web app to tell users the result set was truncated, without returning more than `N` rows to the UI layer.
 
 ### 5. Hokkien Full-text Search (`hokkien_fulltext`)
 **UI Label:** 全文(閩南語)
