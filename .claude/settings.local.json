@@ -16,7 +16,9 @@
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_wait_for",
       "Bash(hokkien-sutian-query:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "Bash(git check-ignore:*)",
+      "WebSearch"
     ]
   }
 }
