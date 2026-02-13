@@ -687,7 +687,12 @@ const HokkienDictionary = () => {
   useEffect(() => {
     const loadDb = async () => {
       try {
-        const SQL = await initSqlJs();
+        const SQL = await initSqlJs({
+          locateFile: (file) => {
+            if (typeof window === "undefined") return file;
+            return `${window.location.origin}/${file}?v=2`;
+          },
+        });
         const response = await fetch("/assets/data/kautian.db");
         if (!response.ok) {
           throw new Error(`Failed to fetch database: ${response.statusText}`);
