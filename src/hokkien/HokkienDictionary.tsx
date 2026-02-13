@@ -261,22 +261,32 @@ const HokkienDictionary = () => {
         );
       }
 
-      const limitEnabled = getEffectiveSearchLimitEnabled(
-        options?.limitEnabledOverride,
-      );
-      const limitValue = getEffectiveSearchLimitValue(
-        options?.limitValueOverride,
-      );
-      params.set(
-        SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM,
-        limitEnabled ? "1" : "0",
-      );
-      params.set(SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM, String(limitValue));
+      const limitEnabledOverrideResolved =
+        options?.limitEnabledOverride ?? searchResultLimitEnabledOverride;
+      if (limitEnabledOverrideResolved === null) {
+        params.delete(SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM);
+      } else {
+        params.set(
+          SEARCH_RESULT_LIMIT_ENABLED_QUERY_PARAM,
+          limitEnabledOverrideResolved ? "1" : "0",
+        );
+      }
+
+      const limitValueOverrideResolved =
+        options?.limitValueOverride ?? searchResultLimitValueOverride;
+      if (limitValueOverrideResolved === null) {
+        params.delete(SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM);
+      } else {
+        params.set(
+          SEARCH_RESULT_LIMIT_VALUE_QUERY_PARAM,
+          String(limitValueOverrideResolved),
+        );
+      }
     },
     [
       fallbackAutoSwitchQueryModeOverride,
-      getEffectiveSearchLimitEnabled,
-      getEffectiveSearchLimitValue,
+      searchResultLimitEnabledOverride,
+      searchResultLimitValueOverride,
     ],
   );
 
@@ -687,7 +697,15 @@ const HokkienDictionary = () => {
   useEffect(() => {
     const loadDb = async () => {
       try {
-        const SQL = await initSqlJs();
+        const SQL = await initSqlJs({
+          locateFile: (file) => {
+            if (typeof window === "undefined") return "sql-wasm.wasm";
+            if (file.endsWith(".wasm")) {
+              return `${window.location.origin}/sql-wasm.wasm`;
+            }
+            return `${window.location.origin}/${file}`;
+          },
+        });
         const response = await fetch("/assets/data/kautian.db");
         if (!response.ok) {
           throw new Error(`Failed to fetch database: ${response.statusText}`);

@@ -12,7 +12,8 @@ cf-build:
 
 list-deployments:
 # 	wrangler pages deployment list --project-name $(CF_PAGES_PROJECT_NAME) | head -n 30
-	wrangler pages deployment list --project-name $(CF_PAGES_PROJECT_NAME) --json | rich_tables.py --head 20
+# 	wrangler pages deployment list --project-name $(CF_PAGES_PROJECT_NAME) --json | rich_tables.py --head 20
+	wrangler pages deployment list --project-name $(CF_PAGES_PROJECT_NAME) --json | rich_tables.py --head 18
 
 open-dashboard:
 	open https://dash.cloudflare.com/?to=/:account/pages/view/$(CF_PAGES_PROJECT_NAME)
