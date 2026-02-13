@@ -699,7 +699,10 @@ const HokkienDictionary = () => {
       try {
         const SQL = await initSqlJs({
           locateFile: (file) => {
-            if (typeof window === "undefined") return file;
+            if (typeof window === "undefined") return "sql-wasm.wasm";
+            if (file.endsWith(".wasm")) {
+              return `${window.location.origin}/sql-wasm.wasm`;
+            }
             return `${window.location.origin}/${file}`;
           },
         });
