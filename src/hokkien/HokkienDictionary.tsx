@@ -50,6 +50,11 @@ import modeHelpText from "../../data/mode-help.jsonc?raw";
 const THEME_STORAGE_KEY = "hokkien-sutian:theme";
 const FALLBACK_AUTO_SWITCH_STORAGE_KEY =
   "hokkien-sutian:fallback-auto-switch-query-mode";
+const SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY =
+  "hokkien-sutian:search-result-limit-enabled";
+const SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY =
+  "hokkien-sutian:search-result-limit-value";
+const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 
 type ModeHelpExampleLink = {
   url: string;
@@ -118,6 +123,27 @@ const HokkienDictionary = () => {
   const [isSingleEntryView, setIsSingleEntryView] = useState(false);
   const [toneGroups, setToneGroups] = useState<ToneGroup[]>([]);
   const [isPhoneticSearch, setIsPhoneticSearch] = useState(false);
+  const [searchResultLimitEnabled, setSearchResultLimitEnabled] =
+    useState<boolean>(() => {
+      if (typeof window === "undefined") return true;
+      const saved = window.localStorage.getItem(
+        SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY,
+      );
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+      return true;
+    });
+  const [searchResultLimitValue, setSearchResultLimitValue] = useState<number>(
+    () => {
+      if (typeof window === "undefined") return DEFAULT_SEARCH_RESULT_LIMIT;
+      const saved = Number(
+        window.localStorage.getItem(SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY),
+      );
+      return Number.isFinite(saved) && saved > 0
+        ? Math.floor(saved)
+        : DEFAULT_SEARCH_RESULT_LIMIT;
+    },
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -139,6 +165,22 @@ const HokkienDictionary = () => {
       // Ignore storage errors (private mode, disabled storage, etc.)
     }
   }, [fallbackAutoSwitchQueryMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        SEARCH_RESULT_LIMIT_ENABLED_STORAGE_KEY,
+        searchResultLimitEnabled ? "1" : "0",
+      );
+      window.localStorage.setItem(
+        SEARCH_RESULT_LIMIT_VALUE_STORAGE_KEY,
+        String(searchResultLimitValue),
+      );
+    } catch {
+      // Ignore storage errors (private mode, disabled storage, etc.)
+    }
+  }, [searchResultLimitEnabled, searchResultLimitValue]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -236,7 +278,11 @@ const HokkienDictionary = () => {
         let finalResults: Result[] = [];
 
         for (const candidateMode of fallbackModes) {
-          const candidateResults = performSearch(db, term, candidateMode);
+          const candidateResults = performSearch(db, term, candidateMode, {
+            maxResults: searchResultLimitEnabled
+              ? searchResultLimitValue
+              : undefined,
+          });
           if (candidateResults.length > 0) {
             chosenMode = candidateMode;
             finalResults = candidateResults;
@@ -260,7 +306,13 @@ const HokkienDictionary = () => {
         setSearching(false);
       }
     },
-    [db, getEffectiveFallbackAutoSwitchEnabled, updateUrlModeAndTerm],
+    [
+      db,
+      getEffectiveFallbackAutoSwitchEnabled,
+      searchResultLimitEnabled,
+      searchResultLimitValue,
+      updateUrlModeAndTerm,
+    ],
   );
 
   const handleRandomWord = useCallback(() => {
@@ -968,6 +1020,10 @@ const HokkienDictionary = () => {
         onAlwaysShowButtonsChange={setAlwaysShowButtons}
         fallbackAutoSwitchQueryMode={fallbackAutoSwitchQueryMode}
         onFallbackAutoSwitchQueryModeChange={setFallbackAutoSwitchQueryMode}
+        resultLimitEnabled={searchResultLimitEnabled}
+        onResultLimitEnabledChange={setSearchResultLimitEnabled}
+        resultLimitValue={searchResultLimitValue}
+        onResultLimitValueChange={setSearchResultLimitValue}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
       />

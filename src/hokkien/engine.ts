@@ -209,6 +209,14 @@ export const performSearch = (
 ): Result[] => {
   if (!term.trim()) return [];
 
+  const rawMaxResults = options?.maxResults;
+  const maxResults =
+    typeof rawMaxResults === "number" &&
+    Number.isFinite(rawMaxResults) &&
+    rawMaxResults > 0
+      ? Math.floor(rawMaxResults)
+      : null;
+
   if (mode === "single_entry") {
     const entryId = parseInt(term.trim(), 10);
     if (Number.isNaN(entryId)) return [];
@@ -229,17 +237,23 @@ export const performSearch = (
         if (foundResults.has(substring)) continue;
 
         const matchedEntries: Result[] = [];
+        const sql =
+          "SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'";
+        const params: Record<string, SqlValue> = { $term: substring };
         const matchRes = execSingle(
           db,
-          "SELECT id, hanzi FROM entries WHERE hanzi = $term OR hanzi LIKE $term || '【%'",
-          { $term: substring },
+          maxResults === null ? sql : `${sql} LIMIT $limit`,
+          maxResults === null ? params : { ...params, $limit: maxResults },
         );
 
-        matchRes.values.forEach((row) => {
+        for (const row of matchRes.values) {
           const id = row[0] as number;
           const details = fetchEntryDetails(db, id);
           if (details) matchedEntries.push(details);
-        });
+          if (maxResults !== null && matchedEntries.length >= maxResults) {
+            break;
+          }
+        }
 
         if (matchedEntries.length > 0) {
           foundResults.set(substring, {
@@ -257,13 +271,6 @@ export const performSearch = (
 
   const trimmedTerm = term.trim();
   const likeTerm = `%${trimmedTerm}%`;
-  const rawMaxResults = options?.maxResults;
-  const maxResults =
-    typeof rawMaxResults === "number" &&
-    Number.isFinite(rawMaxResults) &&
-    rawMaxResults > 0
-      ? Math.floor(rawMaxResults)
-      : null;
   const queries: Record<SearchMode, string> = {
     hokkien_entry:
       "SELECT id FROM entries WHERE hanzi LIKE $term OR romanization LIKE $term",
@@ -312,7 +319,9 @@ export const performSearch = (
       // For runtimes that can't register SQL functions (e.g., bun:sqlite 1.3.x),
       // fall back to JS filtering.
       return sortResults(
-        Array.from(regexSearchFallback(db, trimmedTerm, maxResults ?? undefined))
+        Array.from(
+          regexSearchFallback(db, trimmedTerm, maxResults ?? undefined),
+        )
           .map((id) => fetchEntryDetails(db, id))
           .filter(Boolean) as Result[],
         trimmedTerm,

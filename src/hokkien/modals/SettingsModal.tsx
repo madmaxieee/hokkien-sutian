@@ -38,6 +38,10 @@ export const SettingsModal = ({
   onAlwaysShowButtonsChange,
   fallbackAutoSwitchQueryMode,
   onFallbackAutoSwitchQueryModeChange,
+  resultLimitEnabled,
+  onResultLimitEnabledChange,
+  resultLimitValue,
+  onResultLimitValueChange,
   themeMode,
   onThemeModeChange,
 }: {
@@ -49,6 +53,10 @@ export const SettingsModal = ({
   onAlwaysShowButtonsChange: (value: boolean) => void;
   fallbackAutoSwitchQueryMode: boolean;
   onFallbackAutoSwitchQueryModeChange: (value: boolean) => void;
+  resultLimitEnabled: boolean;
+  onResultLimitEnabledChange: (value: boolean) => void;
+  resultLimitValue: number;
+  onResultLimitValueChange: (value: number) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (value: ThemeMode) => void;
 }) => {
@@ -89,6 +97,33 @@ export const SettingsModal = ({
               checked={fallbackAutoSwitchQueryMode}
               onChange={onFallbackAutoSwitchQueryModeChange}
             />
+
+            <div className="py-3 space-y-2">
+              <IOStoggle
+                label="限制查詢結果筆數"
+                checked={resultLimitEnabled}
+                onChange={onResultLimitEnabledChange}
+              />
+              <div className="flex items-center justify-between gap-3 pl-1">
+                <span className="text-sm text-muted-foreground">
+                  每次查詢上限
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={resultLimitValue}
+                  disabled={!resultLimitEnabled}
+                  onChange={(e) => {
+                    const parsed = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(parsed) && parsed > 0) {
+                      onResultLimitValueChange(parsed);
+                    }
+                  }}
+                  className="w-28 rounded-md border border-border bg-background px-2 py-1 text-right text-sm text-foreground disabled:opacity-50"
+                />
+              </div>
+            </div>
 
             <div className="py-3">
               <div className="text-sm font-semibold text-muted-foreground mb-2">

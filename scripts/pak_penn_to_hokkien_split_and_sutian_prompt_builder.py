@@ -11,6 +11,7 @@ import argparse
 import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,7 +42,12 @@ TO_ZH_TW_CONVERTER = opencc.OpenCC("s2twp.json")
 DEFAULT_QUERY_MODE = "mf"
 DEFAULT_MAX_RESULTS_PER_WORD = 3
 DEFAULT_MAX_MEANINGS_PER_ENTRY = 12
-DEFAULT_MAX_EXAMPLES_PER_MEANING = 1
+DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING = 1
+DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = 1
+
+MAX_MEANINGS_PER_ENTRY = DEFAULT_MAX_MEANINGS_PER_ENTRY
+MAX_ROMANIZED_EXAMPLES_PER_MEANING = DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING
+MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
 
 # --- Core Functions ---
 
@@ -66,14 +72,7 @@ def invoke_cli(
     Returns:
         Parsed JSON dict with keys: mode, requestedMode, term, results.
     """
-    query_term = TO_ZH_TW_CONVERTER.convert(term)
-    cmd = ["bun", "run", str(QUERY_SCRIPT_PATH), mode, query_term, "--no-pretty"]
-    if db_path:
-        cmd.extend(["--db", db_path])
-    if no_fallback:
-        cmd.append("--no-fallback-auto-switch-query-mode")
-    if isinstance(max_results, int) and max_results > 0:
-        cmd.extend(["--limit", str(max_results)])
+    cmd = build_query_cli_cmd(term, mode, db_path, no_fallback, max_results)
 
     logger.debug(f"Invoking CLI: {' '.join(cmd)}")
     try:
@@ -95,6 +94,30 @@ def invoke_cli(
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse CLI JSON output: {e}")
         sys.exit(1)
+
+
+def build_query_cli_cmd(
+    term: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_results: int | None,
+) -> list[str]:
+    """Builds argv for invoking scripts/query.ts via bun."""
+    query_term = TO_ZH_TW_CONVERTER.convert(term)
+    cmd = ["bun", "run", str(QUERY_SCRIPT_PATH), mode, query_term, "--no-pretty"]
+    if db_path:
+        cmd.extend(["--db", db_path])
+    if no_fallback:
+        cmd.append("--no-fallback-auto-switch-query-mode")
+    if isinstance(max_results, int) and max_results > 0:
+        cmd.extend(["--limit", str(max_results)])
+    return cmd
+
+
+def shell_format_cmd(cmd: list[str]) -> str:
+    """Formats argv into shell-safe command string."""
+    return " ".join(shlex.quote(part) for part in cmd)
 
 
 def normalize_hanzi(hanzi: str) -> str:
@@ -157,7 +180,7 @@ def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> 
 
     # Meanings
     meanings = entry.get("meanings", [])
-    for meaning in meanings[:DEFAULT_MAX_MEANINGS_PER_ENTRY]:
+    for meaning in meanings[:MAX_MEANINGS_PER_ENTRY]:
         pos = meaning.get("part_of_speech", "")
         explanation = meaning.get("explanation", "")
         examples = meaning.get("examples", [])
@@ -167,25 +190,38 @@ def format_entry_markdown(entry: dict[str, Any], header_level: str = "####") -> 
         lines.append(f"{display_id}. ({pos}) {explanation}")
 
         # Examples
-        for example in examples[:DEFAULT_MAX_EXAMPLES_PER_MEANING]:
+        shown_romanized = 0
+        shown_non_romanized = 0
+        shown_examples = 0
+        for example in examples:
             hanzi_ex = example.get("hanzi", "")
-            romanization_ex = example.get("romanization", "")
+            romanization_ex = str(example.get("romanization", "")).strip()
             mandarin_ex = example.get("mandarin_translation", "")
+
+            if romanization_ex:
+                if shown_romanized >= MAX_ROMANIZED_EXAMPLES_PER_MEANING:
+                    continue
+                shown_romanized += 1
+            else:
+                if (
+                    MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING >= 0
+                    and shown_non_romanized >= MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
+                ):
+                    continue
+                shown_non_romanized += 1
+
             lines.append(f"   - {hanzi_ex} ({romanization_ex})")
             if mandarin_ex:
                 lines.append(f"     {mandarin_ex}")
+            shown_examples += 1
 
-        if len(examples) > DEFAULT_MAX_EXAMPLES_PER_MEANING:
-            lines.append(
-                f"   - …（省略 {len(examples) - DEFAULT_MAX_EXAMPLES_PER_MEANING} 例）"
-            )
+        if len(examples) > shown_examples:
+            lines.append(f"   - …（省略 {len(examples) - shown_examples} 例）")
 
         lines.append("")
 
-    if len(meanings) > DEFAULT_MAX_MEANINGS_PER_ENTRY:
-        lines.append(
-            f"*（省略 {len(meanings) - DEFAULT_MAX_MEANINGS_PER_ENTRY} 條義項）*"
-        )
+    if len(meanings) > MAX_MEANINGS_PER_ENTRY:
+        lines.append(f"*（省略 {len(meanings) - MAX_MEANINGS_PER_ENTRY} 條義項）*")
         lines.append("")
 
     # Entry synonyms
@@ -303,8 +339,15 @@ def segment_with_jieba(text: str) -> list[str]:
     tw_to_cn = opencc.OpenCC("tw2s.json")
     cn_to_tw = opencc.OpenCC("s2twp.json")
 
+    cjk_only_text = "".join(re.findall(r"[\u4E00-\u9FFF]+", text))
+    if cjk_only_text != text:
+        logger.info("Stripped non-Chinese characters before segmentation.")
+    if not cjk_only_text:
+        logger.warning("No Chinese characters found for segmentation.")
+        return []
+
     logger.info("Converting to Simplified Chinese for segmentation...")
-    simplified_text = tw_to_cn.convert(text)
+    simplified_text = tw_to_cn.convert(cjk_only_text)
 
     logger.info("Segmenting with jieba...")
     pos_to_drop = {"e", "y"}  # interjections, modal particles
@@ -332,6 +375,24 @@ def segment_with_jieba(text: str) -> list[str]:
         logger.info(
             f"Dropped {len(dropped_words)} interjections/particles: {', '.join(dropped_words)}"
         )
+
+    return unique_words
+
+
+def build_query_words_from_input(input_text: str) -> list[str]:
+    """Segments and filters input into unique query words."""
+    segmented_words = segment_with_jieba(input_text)
+    words = [word for word in segmented_words if is_queryable_word(word)]
+
+    # Deduplicate while preserving order after filtering
+    seen_filtered = set()
+    unique_words = [
+        x for x in words if not (x in seen_filtered or seen_filtered.add(x))
+    ]
+
+    removed_count = len(segmented_words) - len(unique_words)
+    if removed_count > 0:
+        logger.info(f"Filtered out {removed_count} non-query tokens.")
 
     return unique_words
 
@@ -538,17 +599,7 @@ def run_jieba_path(
     Returns:
         List of formatted section strings.
     """
-    # Segment with jieba
-    segmented_words = segment_with_jieba(input_text)
-    words = [word for word in segmented_words if is_queryable_word(word)]
-
-    # Deduplicate while preserving order after filtering
-    seen_filtered = set()
-    words = [x for x in words if not (x in seen_filtered or seen_filtered.add(x))]
-
-    removed_count = len(segmented_words) - len(words)
-    if removed_count > 0:
-        logger.info(f"Filtered out {removed_count} non-query tokens.")
+    words = build_query_words_from_input(input_text)
 
     if not words:
         logger.warning("No words to query after segmentation.")
@@ -645,6 +696,31 @@ def run_jieba_path(
     return sections
 
 
+def run_dry_run(
+    input_text: str,
+    mode: str,
+    db_path: str | None,
+    no_fallback: bool,
+    max_results_per_word: int,
+) -> None:
+    """Prints commands that would be used to invoke query.ts, without executing."""
+    words = build_query_words_from_input(input_text)
+    if not words:
+        logger.warning("No words to query after segmentation.")
+        return
+
+    logger.info(f"Dry-run: would query {len(words)} words (query.ts not executed).")
+    for word in words:
+        cmd = build_query_cli_cmd(
+            word,
+            mode,
+            db_path,
+            no_fallback,
+            max_results_per_word,
+        )
+        print(shell_format_cmd(cmd))
+
+
 def read_input(args: argparse.Namespace) -> str:
     """
     Reads input from positional arg, --file, or stdin.
@@ -717,6 +793,15 @@ def main():
         action="store_true",
         help="Disable CLI fallback auto-switch.",
     )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Run jieba and print query.ts commands only (shell-quoted), "
+            "without executing queries."
+        ),
+    )
 
     # Parallel execution (mandatory jieba segmentation mode)
     parser.add_argument(
@@ -732,6 +817,30 @@ def main():
         help=(
             "Maximum number of dictionary entries kept per segmented word "
             f"(default: {DEFAULT_MAX_RESULTS_PER_WORD})."
+        ),
+    )
+    parser.add_argument(
+        "--max-meanings-per-entry",
+        type=int,
+        default=DEFAULT_MAX_MEANINGS_PER_ENTRY,
+        help=f"Maximum meanings shown per entry (default: {DEFAULT_MAX_MEANINGS_PER_ENTRY}).",
+    )
+    parser.add_argument(
+        "--max-romanized-examples-per-meaning",
+        type=int,
+        default=DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING,
+        help=(
+            "Maximum examples WITH romanization shown per meaning "
+            f"(default: {DEFAULT_MAX_ROMANIZED_EXAMPLES_PER_MEANING})."
+        ),
+    )
+    parser.add_argument(
+        "--max-non-romanized-examples-per-meaning",
+        type=int,
+        default=DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING,
+        help=(
+            "Maximum examples WITHOUT romanization shown per meaning "
+            f"(default: {DEFAULT_MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING}; use -1 for unlimited)."
         ),
     )
     # Output options
@@ -756,11 +865,33 @@ def main():
 
     args = parser.parse_args()
 
+    global MAX_MEANINGS_PER_ENTRY
+    global MAX_ROMANIZED_EXAMPLES_PER_MEANING
+    global MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING
+
+    MAX_MEANINGS_PER_ENTRY = max(0, args.max_meanings_per_entry)
+    MAX_ROMANIZED_EXAMPLES_PER_MEANING = max(
+        0,
+        args.max_romanized_examples_per_meaning,
+    )
+    MAX_NON_ROMANIZED_EXAMPLES_PER_MEANING = args.max_non_romanized_examples_per_meaning
+
     # Read input
     input_text = read_input(args)
     if not input_text:
         logger.error("Input text is empty. Exiting.")
         sys.exit(1)
+
+    if args.dry_run:
+        logger.info("Running mandatory jieba segmentation mode (dry-run)...")
+        run_dry_run(
+            input_text,
+            args.mode,
+            args.db,
+            args.no_fallback,
+            args.max_results_per_word,
+        )
+        return
 
     # Run mandatory jieba path
     logger.info("Running mandatory jieba segmentation mode...")
