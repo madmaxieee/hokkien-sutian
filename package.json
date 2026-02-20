@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "bun run --bun vite",
+    "build": "bun run --bun tsc -b && bun run --bun vite build",
     "query": "bun run scripts/query.ts",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "lint": "bun run --bun eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "bun run --bun vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
