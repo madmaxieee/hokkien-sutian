@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../bun"
+		}
+	],
+  "settings": {
+    "chat.tools.terminal.autoApprove": {
+      "sqlite3": true,
+      "git add": true
+    }
+  }
+}
