@@ -32,11 +32,19 @@ Data preparation scripts: https://tddschn/moe-hokkien-sutian-data .
 - https://sutian.teddysc.me/?qs=%E4%BD%A0%E6%AC%B2%E5%8E%BB%E4%BD%97%E8%90%BD%E4%BB%94
 - https://sutian.teddysc.me/?su=9222
 
+<details>
+  <summary>Screenshots</summary>
+  
 <img width="1508" height="1047" alt="Image" src="https://github.com/user-attachments/assets/0c4646a5-efc2-403a-a724-c395c1ed3daf" />
 
 <img width="1513" height="1045" alt="Image" src="https://github.com/user-attachments/assets/629593c2-c012-41c8-a1bb-98835bd98a31" />
 
 <img width="912" height="1041" alt="Image" src="https://github.com/user-attachments/assets/328a794d-ebb3-4fcc-b2ea-b41bff2b1a59" />
+<!-- Two important rules:
+
+Make sure you have an empty line after the closing </summary> tag, otherwise the markdown/code blocks won't show correctly.
+Make sure you have an empty line after the closing </details> tag if you have multiple collapsible sections. -->
+</details>
 
 ### 2. CLI
 
