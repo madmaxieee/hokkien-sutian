@@ -25,12 +25,15 @@ Data preparation scripts: https://tddschn/moe-hokkien-sutian-data .
 
 ## 4 User interfaces
 
-- 1. Web app - https://sutian.teddysc.me/
-- 2. CLI
+### 1. Web app - https://sutian.teddysc.me/
+
+### 2. CLI
   - hokkien-sutian-query (see `bin` in [package.json](package.json)), a `bun` script that fully replicates the web app's features for your terminal.
   - hokkien_sutian_pak_penn_to_hokkien_translation_prompt_builder.py ([package.json](package.json)) - it extract relevant entries and examples from the SQLite database and generates a (long) prompt for LLMs to translate a given 北平方言 sentence(s) into Hokkien. LLM usually does a okay job. I do not recommend using China developed LLMs (like Kimi) for this purpose, they'll fuck up your translation or refuse to generate output. Just use latest long context Gemini flash or pro on AI Studio, these models seem to have some pretraining done in Hokkien.
-- 3. Alfred workflow - script filter
 
+### 3. Alfred workflow - script filter
+
+<img width="764" height="540" alt="Image" src="https://github.com/user-attachments/assets/a0105b6f-0e6a-48b3-b1b6-7cea8bb9525b" />
 
 <img width="805" height="640" alt="Image" src="https://github.com/user-attachments/assets/d80c96f2-c61c-4f64-9769-a877b131b487" />
 
@@ -52,7 +55,7 @@ The web app accepts URL query params, you can easily use them in alfred too (you
 
 <img width="632" height="392" alt="Image" src="https://github.com/user-attachments/assets/4bbd9b13-c2c9-445b-bfcb-4c61c683e36c" />
 
-- 4. Apple Dictionary 
+### 4. Apple Dictionary 
   - You can use the `generate_apple_dict.py` script to generate a Apple Dictionary bundle from the SQLite database. It will create a `.dictionary` bundle that you can install on macOS. The script requires the Dictionary Development Kit from Apple, which is included in Xcode's additional tools.
 
 Searching for "連" in the Apple Dictionary app (`multi_search` mode is not possible in rigid Apple Dictionary app, it cannot be use look up a whole Hokkien sentence):
