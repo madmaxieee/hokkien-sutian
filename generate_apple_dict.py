@@ -2,10 +2,8 @@
 import sqlite3
 import re
 import os
+import argparse
 from xml.sax.saxutils import escape
-
-DB_PATH = "public/assets/data/kautian.db"
-OUTPUT_DIR = "apple_dict_build"
 
 
 def strip_annotations(text):
@@ -14,18 +12,18 @@ def strip_annotations(text):
     return re.sub(r"【.*?】", "", text).strip()
 
 
-def setup_directories():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+def setup_directories(output_dir):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
 
-def generate():
-    setup_directories()
-    conn = sqlite3.connect(DB_PATH)
+def generate(db_path, output_dir, dict_kit_dir):
+    setup_directories(output_dir)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    print("Loading database into memory...")
+    print(f"Loading database from {db_path}...")
 
     # Load Examples
     examples_by_meaning = {}
@@ -43,7 +41,7 @@ def generate():
             meanings_by_entry[e_id] = []
         meanings_by_entry[e_id].append(row)
 
-    # Load alternative pronunciations and variants (Optional but good for search)
+    # Load alternative pronunciations and variants
     alts_by_entry = {}
     for row in cursor.execute("SELECT * FROM alternative_pronunciations"):
         e_id = row["entry_id"]
@@ -53,7 +51,7 @@ def generate():
 
     print("Generating Dictionary.xml...")
 
-    xml_path = os.path.join(OUTPUT_DIR, "Dictionary.xml")
+    xml_path = os.path.join(output_dir, "Dictionary.xml")
     with open(xml_path, "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         f.write(
@@ -126,8 +124,8 @@ def generate():
         f.write("</d:dictionary>\n")
 
     print("Generating MyInfo.plist...")
-    plist_path = os.path.join(OUTPUT_DIR, 'MyInfo.plist')
-    with open(plist_path, 'w', encoding='utf-8') as f:
+    plist_path = os.path.join(output_dir, "MyInfo.plist")
+    with open(plist_path, "w", encoding="utf-8") as f:
         f.write("""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -152,7 +150,7 @@ def generate():
 </plist>""")
 
     print("Generating Dictionary.css...")
-    css_path = os.path.join(OUTPUT_DIR, "Dictionary.css")
+    css_path = os.path.join(output_dir, "Dictionary.css")
     with open(css_path, "w", encoding="utf-8") as f:
         f.write("""
 @charset "UTF-8";
@@ -170,17 +168,17 @@ li { margin-bottom: 0.5em; }
 """)
 
     print("Generating Makefile...")
-    makefile_path = os.path.join(OUTPUT_DIR, "Makefile")
+    makefile_path = os.path.join(output_dir, "Makefile")
     with open(makefile_path, "w", encoding="utf-8") as f:
-        f.write("""
+        f.write(f"""
 # Apple Dictionary Development Kit Makefile
 DICT_NAME		= "閩南語辭典"
 DICT_SRC_PATH	= Dictionary.xml
 CSS_PATH		= Dictionary.css
 PLIST_PATH		= MyInfo.plist
 
-# Replace this with the actual path to your Dictionary Development Kit
-DICT_BUILD_TOOL_DIR	= /Users/tsca/Downloads/Additional_Tools_for_Xcode_26.6/xcode_dmg/Utilities/Dictionary Development Kit
+# Customizable path generated from Python script
+DICT_BUILD_TOOL_DIR	= "{dict_kit_dir}"
 
 build:
 	"$(DICT_BUILD_TOOL_DIR)/bin/build_dict.sh" $(DICT_NAME) $(DICT_SRC_PATH) $(CSS_PATH) $(PLIST_PATH)
@@ -197,8 +195,38 @@ clean:
 	$(RM) -rf objects
 """)
 
-    print("All files generated successfully in the 'apple_dict_build' directory.")
+    print(f"All files generated successfully in the '{output_dir}' directory.")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate Apple Dictionary bundle files from Hokkien Sutian SQLite database."
+    )
+
+    parser.add_argument(
+        "--db",
+        default="public/assets/data/kautian.db",
+        help="Path to the SQLite database (default: public/assets/data/kautian.db)",
+    )
+    parser.add_argument(
+        "--out",
+        default="apple_dict_build",
+        help="Output directory for the generated files (default: apple_dict_build)",
+    )
+    parser.add_argument(
+        "--dict-kit",
+        default="/Developer/Extras/Dictionary Development Kit",
+        help='Path to the Apple Dictionary Development Kit (default: "/Developer/Extras/Dictionary Development Kit")',
+    )
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.db):
+        print(f"Error: Database not found at '{args.db}'")
+        return
+
+    generate(args.db, args.out, args.dict_kit)
 
 
 if __name__ == "__main__":
-    generate()
+    main()

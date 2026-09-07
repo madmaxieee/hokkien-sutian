@@ -173,7 +173,8 @@ The web app accepts URL query params, you can easily use them in alfred too (you
 <img width="632" height="392" alt="Image" src="https://github.com/user-attachments/assets/4bbd9b13-c2c9-445b-bfcb-4c61c683e36c" />
 
 ### 4. Apple Dictionary 
-  - You can use the `generate_apple_dict.py` script to generate a Apple Dictionary bundle from the SQLite database. It will create a `.dictionary` bundle that you can install on macOS. The script requires the Dictionary Development Kit from Apple, which is included in Xcode's additional tools.
+
+You can use the `generate_apple_dict.py` script to generate a Apple Dictionary bundle from the SQLite database. It will create a `.dictionary` bundle that you can install on macOS. The script requires the Dictionary Development Kit from Apple, which is included in Xcode's additional tools.
 
 Searching for "連" in the Apple Dictionary app (`multi_search` mode is not possible in rigid Apple Dictionary app, it cannot be use look up a whole Hokkien sentence):
 
@@ -182,6 +183,34 @@ Searching for "連" in the Apple Dictionary app (`multi_search` mode is not poss
 Force touch Look Up:
 
 <img width="408" height="456" alt="Image" src="https://github.com/user-attachments/assets/fd9780f0-3aa3-4996-b853-3e03a13a0161" />
+
+To use this, generate your own dict bundle, or download from Releases:
+
+```plain
+❯ ./generate_apple_dict.py -h
+usage: generate_apple_dict.py [-h] [--db DB] [--out OUT] [--dict-kit DICT_KIT]
+
+Generate Apple Dictionary bundle files from Hokkien Sutian SQLite database.
+
+options:
+  -h, --help           show this help message and exit
+  --db DB              Path to the SQLite database (default: public/assets/data/kautian.db)
+  --out OUT            Output directory for the generated files (default: apple_dict_build)
+  --dict-kit DICT_KIT  Path to the Apple Dictionary Development Kit (default: "/Developer/Extras/Dictionary Development Kit")
+❯ ./generate_apple_dict.py --dict-kit '/Users/tsca/Downloads/Additional_Tools_for_Xcode_26.6/xcode_dmg/Utilities/Dictionary Development Kit'
+Loading database from public/assets/data/kautian.db...
+Generating Dictionary.xml...
+Generating MyInfo.plist...
+Generating Dictionary.css...
+Generating Makefile...
+All files generated successfully in the 'apple_dict_build' directory.
+
+# !!!!
+# then, run `cd apple_dict_build && make && make install`
+# then, open Dictionary.app and move the new dictionary to the top of the list in Preferences > Dictionary.
+```
+
+<img width="512" height="109" alt="Image" src="https://github.com/user-attachments/assets/112322c7-3401-4657-880f-3468f529293d" />
 
 
 ## Build
