@@ -184,7 +184,7 @@ Force touch Look Up:
 
 <img width="408" height="456" alt="Image" src="https://github.com/user-attachments/assets/fd9780f0-3aa3-4996-b853-3e03a13a0161" />
 
-To use this, generate your own dict bundle, or download from Releases:
+To use this, generate your own dict bundle, or download from [Releases](https://github.com/tddschn/hokkien-sutian/releases/tag/apple-dict-bundle):
 
 ```plain
 ❯ ./generate_apple_dict.py -h
