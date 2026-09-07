@@ -271,7 +271,7 @@ export async function POST(req: Request) {
   // Send to Whisper
   const transcription = await whisper.transcribe(audio, {
     language: 'zh',
-    prompt: 'Taiwanese Hokkien syllable'
+    prompt: 'Hokkien syllable'
   });
 
   // Parse into phonetic components

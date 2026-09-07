@@ -32,7 +32,7 @@ Main dictionary entries table.
 | id           | INTEGER | Primary key                                                          |
 | type         | TEXT    | Entry type (e.g., "主詞目")                                          |
 | hanzi        | TEXT    | Chinese characters (may include annotations like 【替】【白】【文】) |
-| romanization | TEXT    | Taiwanese romanization (POJ/Tâi-lô)                                  |
+| romanization | TEXT    | Hokkien romanization (Tâi-lô)                                  |
 | category     | TEXT    | Comma-separated categories (e.g., "性質、程度,數詞、量詞")           |
 | audio_file   | TEXT    | Audio file reference (e.g., "1(1)")                                  |
 
