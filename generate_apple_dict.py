@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# https://aistudio.google.com/app/prompts/1OiKffqtbQ3MYrfcNUC4bwQYXH810DfiA
+
 import sqlite3
 import re
 import os
